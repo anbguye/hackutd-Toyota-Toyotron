@@ -159,19 +159,15 @@ export default function QuizPage() {
     }
   }, [toast])
 
-  const handleBudgetMinChange = (value: number[]) => {
-    const [next] = value
-    if (typeof next === "number" && Number.isFinite(next)) {
-      const clamped = Math.min(budgetMax, Math.max(BUDGET_MIN, Math.round(next / BUDGET_STEP) * BUDGET_STEP))
-      setBudgetMin(clamped)
-    }
-  }
-
-  const handleBudgetMaxChange = (value: number[]) => {
-    const [next] = value
-    if (typeof next === "number" && Number.isFinite(next)) {
-      const clamped = Math.min(BUDGET_MAX, Math.max(budgetMin, Math.round(next / BUDGET_STEP) * BUDGET_STEP))
-      setBudgetMax(clamped)
+  const handleBudgetRangeChange = (value: number[]) => {
+    if (value.length === 2) {
+      const [min, max] = value
+      if (typeof min === "number" && typeof max === "number" && Number.isFinite(min) && Number.isFinite(max)) {
+        const clampedMin = Math.min(max, Math.max(BUDGET_MIN, Math.round(min / BUDGET_STEP) * BUDGET_STEP))
+        const clampedMax = Math.max(min, Math.min(BUDGET_MAX, Math.round(max / BUDGET_STEP) * BUDGET_STEP))
+        setBudgetMin(clampedMin)
+        setBudgetMax(clampedMax)
+      }
     }
   }
 
@@ -300,38 +296,25 @@ export default function QuizPage() {
                     Toyota Agent shapes recommendations around the financial comfort zone you set.
                   </p>
                 </div>
-                <div className="space-y-8">
-                  <div className="rounded-2xl border border-border/70 bg-background/80 p-8 text-center">
-                    <div className="text-4xl font-bold text-secondary">${budgetMin.toLocaleString()}</div>
-                    <p className="mt-2 text-sm uppercase tracking-[0.25em] text-muted-foreground">Minimum budget</p>
-                    <div className="mt-8 space-y-4">
-                      <Slider
-                        value={[budgetMin]}
-                        onValueChange={handleBudgetMinChange}
-                        min={BUDGET_MIN}
-                        max={budgetMax}
-                        step={BUDGET_STEP}
-                      />
-                      <div className="flex justify-between text-sm text-muted-foreground">
-                        <span>$15,000</span>
-                        <span>${budgetMax.toLocaleString()}</span>
+                <div className="rounded-2xl border border-border/70 bg-background/80 p-8">
+                  <div className="text-center space-y-6">
+                    <div className="space-y-2">
+                      <div className="text-4xl font-bold text-secondary">
+                        ${budgetMin.toLocaleString()} - ${budgetMax.toLocaleString()}
                       </div>
+                      <p className="text-sm uppercase tracking-[0.25em] text-muted-foreground">Budget range</p>
                     </div>
-                  </div>
-                  <div className="rounded-2xl border border-border/70 bg-background/80 p-8 text-center">
-                    <div className="text-4xl font-bold text-secondary">${budgetMax.toLocaleString()}</div>
-                    <p className="mt-2 text-sm uppercase tracking-[0.25em] text-muted-foreground">Maximum budget</p>
                     <div className="mt-8 space-y-4">
                       <Slider
-                        value={[budgetMax]}
-                        onValueChange={handleBudgetMaxChange}
-                        min={budgetMin}
+                        value={[budgetMin, budgetMax]}
+                        onValueChange={handleBudgetRangeChange}
+                        min={BUDGET_MIN}
                         max={BUDGET_MAX}
                         step={BUDGET_STEP}
                       />
                       <div className="flex justify-between text-sm text-muted-foreground">
-                        <span>${budgetMin.toLocaleString()}</span>
-                        <span>$80,000</span>
+                        <span>${BUDGET_MIN.toLocaleString()}</span>
+                        <span>${BUDGET_MAX.toLocaleString()}</span>
                       </div>
                     </div>
                   </div>

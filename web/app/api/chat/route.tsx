@@ -2,6 +2,8 @@ import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { convertToModelMessages, stepCountIs, streamText, type UIDataTypes, type UIMessage } from "ai";
 import { createSsrClient } from "@/lib/supabase/server";
 import { tools, type ChatTools } from "./tools";
+import { intentAgent, vehicleAgent, financeAgent, reportAgent } from "./agents";
+import { orchestrateQuery } from "./orchestrator";
 import { use } from "react";
 
 export type ChatMessage = UIMessage<never, UIDataTypes, ChatTools>;
@@ -35,6 +37,8 @@ function buildSystemPrompt(preferences: Awaited<ReturnType<typeof getUserPrefere
   systemPrompt += "Respond to the user in Markdown format. Use formatting like **bold**, *italic*, lists, and other Markdown features to make your responses clear and well-structured.\n\n";
   systemPrompt +=
     "⚠️ CRITICAL RULE: NEVER make claims about vehicle availability, pricing, or whether vehicles exist WITHOUT FIRST calling the searchToyotaTrims tool to check the actual database. Your training data may be outdated or incorrect - ALWAYS verify with the database first.\n\n";
+  systemPrompt +=
+    "🚫 ABSOLUTELY FORBIDDEN: NEVER explain your tools, architecture, internal processes, or how you work. NEVER mention tool names, agent roles, or system implementation details. NEVER say things like 'I use searchToyotaTrims' or 'I have access to tools' or 'Here's how the system works'. Just use the tools naturally and provide helpful answers as if you're a knowledgeable Toyota expert. Act naturally and conversationally - users don't need to know about your internal mechanisms.\n\n";
 
   if (preferences) {
     // Format preferences for better readability (budget values are already in dollars)
@@ -211,6 +215,100 @@ export async function POST(req: Request) {
   });
 
   try {
+    // Use orchestrator to decide when to retrieve vs use static knowledge
+    const lastMessage = body.messages[body.messages.length - 1];
+    const userMessage = lastMessage && 
+      typeof lastMessage === 'object' && 
+      'content' in lastMessage &&
+      typeof lastMessage.content === 'string'
+      ? lastMessage.content
+      : '';
+
+    if (userMessage) {
+      const decision = await orchestrateQuery(userMessage, preferences);
+
+      // Handle static knowledge responses (no retrieval needed)
+      if (decision.type === "static_knowledge") {
+        // Return static knowledge response directly without LLM call
+        const result = streamText({
+          model: openrouter.chat("nvidia/llama-3.3-nemotron-super-49b-v1.5"),
+          system: buildSystemPrompt(preferences) + "\n\nYou are providing information from Toyota's knowledge base. Be helpful and conversational. Use the provided knowledge to answer the user's question.",
+          messages: [
+            ...convertToModelMessages(body.messages.slice(0, -1)),
+            {
+              role: 'user' as const,
+              content: userMessage,
+            },
+            {
+              role: 'assistant' as const,
+              content: decision.response,
+            },
+          ],
+          stopWhen: stepCountIs(1),
+          tools,
+        });
+
+        return result.toUIMessageStreamResponse();
+      }
+
+      // Handle finance-only queries
+      if (decision.type === "finance_only") {
+        const result = streamText({
+          model: openrouter.chat("nvidia/llama-3.3-nemotron-super-49b-v1.5"),
+          system: buildSystemPrompt(preferences) + `\n\nThe user is asking about financing for a vehicle priced at $${decision.vehiclePrice.toLocaleString()}. You MUST call the estimateFinance tool with vehiclePrice: ${decision.vehiclePrice}.`,
+          messages: convertToModelMessages(body.messages),
+          stopWhen: stepCountIs(3),
+          tools,
+        });
+
+        return result.toUIMessageStreamResponse();
+      }
+
+      // Handle vehicle search with structured constraints
+      if (decision.type === "vehicle_search") {
+        try {
+          // Step 1: Vehicle Agent
+          const vehicleResults = await vehicleAgent(decision.task);
+
+          // Step 2: Finance Agent (if needed)
+          let vehiclesWithFinance = vehicleResults.items;
+          if (decision.needsFinance && vehicleResults.items.length > 0) {
+            vehiclesWithFinance = await financeAgent(vehicleResults.items);
+          }
+
+          // Step 3: Report Agent
+          const narrative = await reportAgent(
+            decision.task,
+            vehiclesWithFinance,
+            userMessage
+          );
+
+          // Create enhanced system prompt with vehicle data
+          const enhancedSystemPrompt = buildSystemPrompt(preferences) + 
+            `\n\nMULTI-AGENT SYSTEM RESULTS:\n` +
+            `Task: ${JSON.stringify(decision.task, null, 2)}\n` +
+            `Vehicles found: ${vehiclesWithFinance.length}\n` +
+            `You MUST call displayCarRecommendations with these vehicles: ${JSON.stringify(vehiclesWithFinance.map(v => ({ trim_id: v.trim_id, model_year: v.model_year, make: v.make, model: v.model, trim: v.trim, msrp: v.msrp, invoice: v.invoice, body_type: v.body_type, body_seats: v.body_seats, combined_mpg: v.combined_mpg, image_url: v.image_url })))}\n` +
+            `Your narrative response: "${narrative}"\n` +
+            `Provide the narrative response first, then call displayCarRecommendations with the vehicles.`;
+          
+          const result = streamText({
+            model: openrouter.chat("nvidia/llama-3.3-nemotron-super-49b-v1.5"),
+            system: enhancedSystemPrompt,
+            messages: convertToModelMessages(body.messages),
+            stopWhen: stepCountIs(5),
+            tools,
+          });
+
+          return result.toUIMessageStreamResponse();
+        } catch (agentError) {
+          console.error("[chat/route] Multi-agent system error:", agentError);
+          // Fall back to standard tool-based approach
+        }
+      }
+    }
+
+    // Standard tool-based approach for other queries (orchestrator returned "standard_chat")
     const result = streamText({
       model: openrouter.chat("nvidia/llama-3.3-nemotron-super-49b-v1.5"),
       system: buildSystemPrompt(preferences),
