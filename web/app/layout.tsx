@@ -13,7 +13,6 @@ const jetbrainsMono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mon
 
 const NAV_ITEMS = [
   { label: "Home", href: "/#top" },
-  { label: "Compare", href: "/compare" },
   { label: "Agent", href: "/chat" },
   { label: "Models", href: "/browse" },
   { label: "Pricing", href: "/#pricing" },

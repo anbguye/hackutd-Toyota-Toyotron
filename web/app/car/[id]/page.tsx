@@ -201,7 +201,7 @@ export default async function CarDetailPage({
     year: trimSpec.model_year,
     submodel: trimSpec.submodel,
     trim: trimSpec.trim,
-    name: `${trimSpec.model}${trimSpec.submodel ? ` ${trimSpec.submodel}` : ""} ${trimSpec.trim}`,
+    name: `${trimSpec.model}${trimSpec.submodel && trimSpec.submodel !== trimSpec.trim ? ` ${trimSpec.submodel}` : ""} ${trimSpec.trim}`,
     type: trimSpec.body_type,
     seats: trimSpec.body_seats,
     mpg: {
