@@ -77,19 +77,19 @@ export function CompareClient() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, ease: "easeOut" }}
         >
+          {/* Scan line animation */}
+          {!prefersReducedMotion && (
+            <motion.div
+              className="absolute top-0 left-0 h-[2px] w-full bg-gradient-to-r from-transparent via-primary to-transparent z-10"
+              variants={scanLine}
+              initial="hidden"
+              animate="show"
+            />
+          )}
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-border/60">
               <thead>
                 <tr className="bg-background/60 backdrop-blur relative">
-                  {/* Scan line animation */}
-                  {!prefersReducedMotion && (
-                    <motion.div
-                      className="absolute top-0 left-0 h-[2px] w-full bg-gradient-to-r from-transparent via-primary to-transparent z-10"
-                      variants={scanLine}
-                      initial="hidden"
-                      animate="show"
-                    />
-                  )}
                   <th className="px-6 py-5 text-left text-xs font-semibold uppercase tracking-[0.28em] text-muted-foreground">
                     Feature
                   </th>
