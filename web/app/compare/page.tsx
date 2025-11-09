@@ -17,7 +17,7 @@ export default function ComparePage() {
                   Compare Toyota models with clarity and confidence.
                 </h1>
                 <p className="max-w-3xl text-base text-muted-foreground sm:text-lg">
-                  Toyota Agent surfaces curated specs, costs, and safety signals in an interface tuned for decision
+                  Toyotron surfaces curated specs, costs, and safety signals in an interface tuned for decision
                   making—balanced, legible, and unmistakably Toyota.
                 </p>
               </div>

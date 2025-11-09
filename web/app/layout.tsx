@@ -22,7 +22,7 @@ const NAV_ITEMS = [
 const SECONDARY_LINKS = [{ label: "Sign In", href: "/login" }]
 
 export const metadata: Metadata = {
-  title: "Toyota Agent - Find Your Perfect Toyota",
+  title: "Toyotron - Find Your Perfect Toyota",
   description: "AI-powered Toyota shopping companion with guided discovery",
   generator: "v0.app",
   icons: {

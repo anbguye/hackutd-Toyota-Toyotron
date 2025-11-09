@@ -35,7 +35,7 @@ const defaultColumns: FooterLinkGroup[] = [
   {
     title: 'Company',
     links: [
-      { label: 'About Toyota Agent', href: '/#about' },
+      { label: 'About Toyotron', href: '/#about' },
       { label: 'HackUTD Project', href: '/#team' },
       { label: 'Privacy Policy', href: '/privacy' },
       { label: 'Terms of Service', href: '/terms' },
@@ -64,7 +64,7 @@ export function ToyotaFooter({
               />
             </div>
             <p className="text-sm/relaxed text-secondary-foreground/70">
-              Toyota Agent is your intelligent co-pilot for finding, comparing, and experiencing Toyota vehicles.
+              Toyotron is your intelligent co-pilot for finding, comparing, and experiencing Toyota vehicles.
               Meticulously crafted for a modern, human-centered shopping journey.
             </p>
           </div>
@@ -93,7 +93,7 @@ export function ToyotaFooter({
         <div className="toyota-divider my-12" />
 
         <div className="flex flex-col gap-4 pb-12 text-xs text-secondary-foreground/60 sm:flex-row sm:items-center sm:justify-between">
-          <p>© {year} Toyota Agent. Crafted for HackUTD.</p>
+          <p>© {year} Toyotron. Crafted for HackUTD.</p>
           <div className="flex flex-wrap items-center gap-4">
             <Link href="/privacy" className="hover:text-white">
               Privacy

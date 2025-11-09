@@ -52,12 +52,12 @@ export default function LoginPage() {
             <div className="space-y-6">
               <Link href="/" className="inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground hover:text-secondary">
                 <ArrowLeft className="h-4 w-4" />
-                Back to Toyota Agent
+                Back to Toyotron
               </Link>
               <div className="space-y-4">
                 <h1 className="text-3xl font-black tracking-tight text-secondary sm:text-4xl">Welcome back, driver.</h1>
                 <p className="text-base text-muted-foreground sm:text-lg">
-                  Sign in to keep collaborating with your Toyota Agent—your saved preferences, comparisons, and test
+                  Sign in to keep collaborating with your Toyotron—your saved preferences, comparisons, and test
                   drive plans are ready where you left them.
                 </p>
               </div>
@@ -68,13 +68,13 @@ export default function LoginPage() {
                   </div>
                   <div className="space-y-2 text-sm text-muted-foreground">
                     <p className="font-semibold text-secondary">Pro tip</p>
-                    <p>Use the same email from your test-drive request—Toyota Agent keeps all your journeys synced.</p>
+                    <p>Use the same email from your test-drive request—Toyotron keeps all your journeys synced.</p>
                   </div>
                 </div>
               </div>
             </div>
             <div className="space-y-3 text-xs text-muted-foreground">
-              <p>Secure sign-in powered by Supabase Auth. Your information stays within Toyota Agent.</p>
+              <p>Secure sign-in powered by Supabase Auth. Your information stays within Toyotron.</p>
             </div>
           </div>
 

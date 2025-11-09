@@ -112,7 +112,7 @@ export default function LandingPage() {
               variants={fadeUp}
               style={prefersReducedMotion ? {} : { y: heroY, opacity: heroOpacity }}
             >
-              <motion.span className="toyota-chip" variants={fadeUp}>Toyota Agent</motion.span>
+              <motion.span className="toyota-chip" variants={fadeUp}>Toyotron</motion.span>
               <motion.div className="space-y-6" variants={fadeUp}>
                 <h1 className="text-balance text-4xl font-black tracking-tight text-secondary sm:text-5xl lg:text-6xl">
                   Find your Toyota. We'll help you get there.
@@ -145,7 +145,7 @@ export default function LandingPage() {
                 style={prefersReducedMotion ? {} : { y: cardY }}
               >
                 <p className="text-sm font-semibold uppercase tracking-[0.3em] text-muted-foreground/80">
-                  Toyota Agent
+                  Toyotron
                 </p>
                 <div className="mt-4 grid gap-6 sm:grid-cols-3">
                   {heroStats.map((stat) => (
@@ -203,7 +203,7 @@ export default function LandingPage() {
       <MotionSection id="features" className="toyota-container space-y-14 scroll-mt-24 md:scroll-mt-28 lg:scroll-mt-32">
         <ScrollReveal>
             <div className="max-w-3xl space-y-4">
-              <span className="toyota-chip">Why Toyota Agent</span>
+              <span className="toyota-chip">Why Toyotron</span>
               <h2 className="text-pretty text-3xl font-black tracking-tight text-secondary sm:text-4xl">
               Simple tools to find your next Toyota.
               </h2>
@@ -376,7 +376,7 @@ export default function LandingPage() {
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                     <Link href="/signup">
                       <Button className="h-12 rounded-full bg-white px-8 text-base font-semibold text-secondary hover:bg-white/90">
-                        Create Toyota Agent account
+                        Create Toyotron account
                       </Button>
                   </Link>
                     <Link href="/chat">

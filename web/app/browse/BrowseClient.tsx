@@ -325,7 +325,7 @@ export default function BrowseClient({ initialItems, initialMeta, initialParams 
                 Explore Toyota models curated for the journeys you actually take.
               </h1>
               <p className="max-w-2xl text-base text-muted-foreground sm:text-lg">
-                Filter by what matters—fuel efficiency, seating, payment scenarios—and Toyota Agent keeps every detail
+                Filter by what matters—fuel efficiency, seating, payment scenarios—and Toyotron keeps every detail
                 sharp, modern, and ready for action.
               </p>
             </div>

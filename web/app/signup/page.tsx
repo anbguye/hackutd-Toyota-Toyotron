@@ -61,11 +61,11 @@ export default function SignupPage() {
             <div className="space-y-6">
               <Link href="/" className="inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground hover:text-secondary">
                 <ArrowLeft className="h-4 w-4" />
-                Back to Toyota Agent
+                Back to Toyotron
               </Link>
               <div className="space-y-4">
                 <h1 className="text-3xl font-black tracking-tight text-secondary sm:text-4xl">
-                  Craft your Toyota Agent profile.
+                  Craft your Toyotron profile.
                 </h1>
                 <p className="text-base text-muted-foreground sm:text-lg">
                   Save your quiz results, favourite models, and personalized cost breakdowns. Your Toyota journey stays
@@ -89,7 +89,7 @@ export default function SignupPage() {
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              By signing up you agree to Toyota Agent&apos;s terms of service and privacy policy.
+              By signing up you agree to Toyotron&apos;s terms of service and privacy policy.
             </p>
           </div>
 

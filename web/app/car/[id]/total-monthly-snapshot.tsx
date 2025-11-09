@@ -42,7 +42,7 @@ export function TotalMonthlySnapshot({
     <div className="rounded-3xl border border-primary/50 bg-primary/5 p-8">
       <h3 className="text-lg font-semibold text-secondary">Total Monthly Snapshot</h3>
       <p className="mt-2 text-sm text-muted-foreground">
-        Toyota Agent combines payment + protection so you know the real cost before stepping into the dealership.
+        Toyotron combines payment + protection so you know the real cost before stepping into the dealership.
       </p>
 
       {/* Monthly Costs Breakdown */}

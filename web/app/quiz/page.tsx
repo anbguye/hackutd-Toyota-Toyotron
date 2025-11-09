@@ -448,7 +448,7 @@ export default function QuizPage() {
                 <div className="space-y-3">
                   <h2 className="text-3xl font-bold text-secondary">Set your budget range</h2>
                   <p className="text-base text-muted-foreground">
-                    Toyota Agent shapes recommendations around the financial comfort zone you set.
+                    Toyotron shapes recommendations around the financial comfort zone you set.
                   </p>
                 </div>
                 <div className="rounded-2xl border border-border/70 bg-background/80 p-8">
@@ -575,7 +575,7 @@ export default function QuizPage() {
               <div className="space-y-6">
               <StepCard
                 title="How critical is fuel efficiency?"
-                description="Toyota Agent blends hybrid, plug-in, and gasoline options based on your stance."
+                description="Toyotron blends hybrid, plug-in, and gasoline options based on your stance."
               >
                 <RadioGroup
                   value={mpgPriority}

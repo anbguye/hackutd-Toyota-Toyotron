@@ -193,7 +193,7 @@ export function CompareClient() {
                   Ready to take the next step?
                 </h2>
                 <p className="text-sm text-white/85 sm:text-base">
-                  You're comparing {selectedCars.length} vehicle{selectedCars.length !== 1 ? "s" : ""}. Let Toyota Agent help you explore financing options, schedule test drives, and make the right choice for your needs.
+                  You're comparing {selectedCars.length} vehicle{selectedCars.length !== 1 ? "s" : ""}. Let Toyotron help you explore financing options, schedule test drives, and make the right choice for your needs.
                 </p>
               </div>
               <Link href="/chat">
