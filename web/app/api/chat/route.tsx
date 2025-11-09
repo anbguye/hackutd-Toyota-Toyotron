@@ -29,6 +29,12 @@ async function getUserPreferences(userId: string) {
       age: data.age || null,
       sex: data.sex || null,
       occupation: data.occupation || null,
+      tradeInValueCents: data.trade_in_value_cents || null,
+      tradeInVin: data.trade_in_vin || null,
+      tradeInConditionScore: data.trade_in_condition_score || null,
+      tradeInConditionIssues: data.trade_in_condition_issues || null,
+      tradeInImageUrl: data.trade_in_image_url || null,
+      tradeInLastEstimatedAt: data.trade_in_last_estimated_at || null,
     };
   } catch (error) {
     console.error("[chat/route] Failed to load user preferences:", error);
