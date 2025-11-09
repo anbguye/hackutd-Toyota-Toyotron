@@ -1,45 +1,80 @@
 "use client";
 
-import { useState } from "react"
-import { Send, User, Bot, Sparkles } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { RequireAuth } from "@/components/auth/RequireAuth"
+import { useState } from "react";
+import { DefaultChatTransport } from "ai";
+import { useChat } from "@ai-sdk/react";
+import { Send, User, Bot, Sparkles } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { RequireAuth } from "@/components/auth/RequireAuth";
 
-type Message = {
-  role: "user" | "agent"
-  content: string
-  suggestions?: string[]
-}
+type DisplayMessage = {
+  id?: string;
+  role: "user" | "agent";
+  content: string;
+  suggestions?: string[];
+};
+
+const initialAgentMessage: DisplayMessage = {
+  role: "agent",
+  content:
+    "Hi! I'm your Toyota shopping companion. Based on your preferences, I found some excellent matches for you. You're looking for an SUV around $35,000 for daily commutes with good fuel efficiency, right?",
+  suggestions: ["Yes, that's right", "I want to adjust my budget", "Show me the options"],
+};
 
 export default function ChatPage() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: "agent",
-      content:
-        "Hi! I'm your Toyota shopping companion. Based on your preferences, I found some excellent matches for you. You're looking for an SUV around $35,000 for daily commutes with good fuel efficiency, right?",
-      suggestions: ["Yes, that's right", "I want to adjust my budget", "Show me the options"],
-    },
-  ])
-  const [input, setInput] = useState("")
+  const [input, setInput] = useState("");
+  const { messages: chatMessages, sendMessage, status, error } = useChat({
+    id: "toyota-agent-chat",
+    transport: new DefaultChatTransport({
+      api: "/api/chat",
+    }),
+  });
 
-  const handleSend = () => {
-    if (!input.trim()) return
+  const isStreaming = status === "streaming" || status === "submitted";
 
-    const newMessages: Message[] = [
-      ...messages,
-      { role: "user", content: input },
-      {
-        role: "agent",
-        content:
-          "Great! Based on what you've told me, I recommend the 2025 Toyota RAV4 Hybrid. It's perfect for daily commuting with an impressive 41 MPG city, seats 5 comfortably, and falls within your budget at $36,000. Would you like to see a detailed breakdown of total costs including insurance and financing?",
-        suggestions: ["Show me total costs", "Compare with other models", "Schedule a test drive"],
-      },
-    ]
-    setMessages(newMessages)
-    setInput("")
-  }
+  const aiMessages = chatMessages
+    .map((message) => {
+      const text = message.parts
+        .map((part) => (part.type === "text" ? part.text : ""))
+        .join("")
+        .trim();
+
+      if (!text) {
+        return null;
+      }
+
+      const displayMessage: DisplayMessage = {
+        role: message.role === "user" ? "user" : "agent",
+        content: text,
+      };
+
+      if (message.id) {
+        displayMessage.id = message.id;
+      }
+
+      return displayMessage;
+    })
+    .filter((message): message is DisplayMessage => message !== null);
+
+  const displayMessages: DisplayMessage[] = [initialAgentMessage, ...aiMessages];
+
+  const handleSend = async () => {
+    const messageToSend = input.trim();
+    if (!messageToSend || isStreaming) {
+      return;
+    }
+
+    try {
+      await sendMessage({
+        parts: [{ type: "text", text: messageToSend }],
+      });
+      setInput("");
+    } catch (sendError) {
+      console.error("Failed to send message", sendError);
+    }
+  };
 
   return (
     <RequireAuth>
@@ -62,15 +97,15 @@ export default function ChatPage() {
               </div>
             </div>
 
-            <div className="relative flex-1 overflow-hidden rounded-[2rem] border border-border/70 bg-card/60 backdrop-blur">
+            <div className="relative flex-1 overflow-hidden rounded-4xl border border-border/70 bg-card/60 backdrop-blur">
               <ScrollArea className="h-full p-8">
                 <div className="space-y-6">
-                  {messages.map((message, i) => {
-                    const isUser = message.role === "user"
+                  {displayMessages.map((message, i) => {
+                    const isUser = message.role === "user";
                     return (
-                      <div key={i} className={`flex gap-4 ${isUser ? "justify-end" : "justify-start"}`}>
+                      <div key={message.id ?? i} className={`flex gap-4 ${isUser ? "justify-end" : "justify-start"}`}>
                         {!isUser && (
-                          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
                             <Bot className="h-5 w-5" />
                           </div>
                         )}
@@ -101,12 +136,12 @@ export default function ChatPage() {
                           )}
                         </div>
                         {isUser && (
-                          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-secondary text-secondary-foreground">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-secondary text-secondary-foreground">
                             <User className="h-5 w-5" />
                           </div>
                         )}
                       </div>
-                    )
+                    );
                   })}
                 </div>
               </ScrollArea>
@@ -117,25 +152,40 @@ export default function ChatPage() {
                     placeholder="Ask about Toyota models, deals, or ownership..."
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleSend()}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        void handleSend();
+                      }
+                    }}
                     className="h-12 flex-1 rounded-full border-border/70 bg-card/80 px-5"
                   />
                   <Button
-                    onClick={handleSend}
+                    onClick={() => {
+                      void handleSend();
+                    }}
                     size="icon"
-                    className="h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-[0_24px_48px_-32px_rgba(235,10,30,0.6)] hover:bg-primary/90"
+                    disabled={isStreaming}
+                    className="h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-[0_24px_48px_-32px_rgba(235,10,30,0.6)] hover:bg-primary/90 disabled:opacity-60"
                   >
                     <Send className="h-5 w-5" />
                   </Button>
                 </div>
-                <p className="mt-3 text-center text-xs text-muted-foreground">
-                  Toyota Agent cross-checks real Toyota data—pricing, incentives, safety, and availability.
-                </p>
+                {error && (
+                  <p className="mt-3 text-center text-xs text-destructive">
+                    Something went wrong. Please try again.
+                  </p>
+                )}
+                {!error && (
+                  <p className="mt-3 text-center text-xs text-muted-foreground">
+                    Toyota Agent cross-checks real Toyota data—pricing, incentives, safety, and availability.
+                  </p>
+                )}
               </div>
             </div>
           </div>
         </div>
       </div>
     </RequireAuth>
-  )
+  );
 }
