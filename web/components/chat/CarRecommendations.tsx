@@ -48,9 +48,9 @@ function CarCard({ car, horizontal = false }: { car: CarCard; horizontal?: boole
 
   return (
     <Link href={`/car/${car.trim_id}`} className="group relative">
-      <article className={`flex h-full flex-col overflow-hidden rounded-[1.75rem] border border-border/70 bg-card/80 shadow-[0_26px_54px_-46px_rgba(15,20,26,0.7)] transition-transform duration-300 hover:-translate-y-1.5 ${horizontal ? "lg:flex-row" : ""}`}>
+      <article className={`flex h-full flex-col overflow-hidden rounded-lg border border-border/70 bg-card/80 shadow-[0_12px_24px_-18px_rgba(15,20,26,0.7)] transition-transform duration-300 hover:-translate-y-0.5 ${horizontal ? "lg:flex-row" : ""}`}>
         <div className={`relative ${horizontal ? "lg:w-1/2" : ""}`}>
-          <div className={`relative aspect-[4/3] overflow-hidden bg-background/50 ${horizontal ? "lg:h-full lg:aspect-auto" : ""}`}>
+          <div className={`relative aspect-[5/3] overflow-hidden bg-background/50 ${horizontal ? "lg:h-full lg:aspect-auto" : ""}`}>
             <div className="absolute inset-0 scale-110">
             <Image
               src={imageUrl}
@@ -62,40 +62,40 @@ function CarCard({ car, horizontal = false }: { car: CarCard; horizontal?: boole
             />
             </div>
           </div>
-          <div className="absolute left-5 top-5 flex gap-2">
+          <div className="absolute left-1.5 top-1.5 flex gap-1">
             {car.model_year && (
-              <Badge className="rounded-full border-border/70 bg-background/90 px-3 py-1 text-xs font-semibold uppercase tracking-[0.25em] text-secondary">
+              <Badge className="rounded-full border-border/70 bg-background/90 px-1 py-0.5 text-xs font-semibold uppercase tracking-[0.1em] text-secondary">
                 {car.model_year}
               </Badge>
             )}
           </div>
         </div>
-        <div className={`flex flex-1 flex-col gap-5 p-6 ${horizontal ? "lg:w-1/2" : ""}`}>
-          <div className="space-y-2">
-            <h3 className="text-xl font-semibold text-secondary">{carName}</h3>
-            <p className="text-sm uppercase tracking-[0.25em] text-muted-foreground">
+        <div className={`flex flex-1 flex-col gap-1.5 p-2.5 ${horizontal ? "lg:w-1/2" : ""}`}>
+          <div className="space-y-0.5">
+            <h3 className="text-xs font-semibold text-secondary leading-tight">{carName}</h3>
+            <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground leading-tight">
               {car.body_type || "Vehicle"} • {car.body_seats ? `${car.body_seats} seats` : "Seating TBD"}
             </p>
           </div>
-          <div className="grid grid-cols-2 gap-4 rounded-2xl border border-border/70 bg-background/80 p-4 text-sm">
+          <div className="grid grid-cols-2 gap-1.5 rounded-md border border-border/70 bg-background/80 p-1.5 text-xs">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Starting</p>
-              <p className="text-lg font-semibold text-secondary">{price}</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.05em] text-muted-foreground leading-tight">Starting</p>
+              <p className="text-xs font-semibold text-secondary leading-tight">{price}</p>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">MPG</p>
-              <p className="text-lg font-semibold text-secondary">{mpg}</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.05em] text-muted-foreground leading-tight">MPG</p>
+              <p className="text-xs font-semibold text-secondary leading-tight">{mpg}</p>
             </div>
           </div>
           {car.drive_type && (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground leading-tight line-clamp-2">
               {car.drive_type}
               {car.transmission ? ` • ${car.transmission}` : ""}
               {car.fuel_type ? ` • ${car.fuel_type}` : ""}
             </p>
           )}
-          <Button className={`mt-auto w-full rounded-full bg-primary px-6 py-2 text-sm font-semibold ${horizontal ? "lg:w-auto" : ""}`}>
-            View details <ArrowRight className="ml-2 h-4 w-4" />
+          <Button className={`mt-auto w-full rounded-full bg-primary px-2.5 py-0.5 text-xs font-semibold h-7 ${horizontal ? "lg:w-auto" : ""}`}>
+            View details <ArrowRight className="ml-1 h-2.5 w-2.5" />
           </Button>
         </div>
       </article>
@@ -120,7 +120,7 @@ export function CarRecommendations({ items }: CarRecommendationsProps) {
   // Two items: side-by-side with vertical card layout (image on top, content below)
   if (items.length === 2) {
     return (
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
         {items.map((car) => (
           <CarCard key={car.trim_id} car={car} horizontal={false} />
         ))}
@@ -131,7 +131,7 @@ export function CarRecommendations({ items }: CarRecommendationsProps) {
   // Three items: horizontal row with vertical card layout
   if (items.length === 3) {
     return (
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
         {items.map((car) => (
           <CarCard key={car.trim_id} car={car} horizontal={false} />
         ))}
@@ -141,7 +141,7 @@ export function CarRecommendations({ items }: CarRecommendationsProps) {
 
   // Four or more items: grid layout
   return (
-    <div className="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-4">
+    <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-2">
       {items.map((car) => (
         <CarCard key={car.trim_id} car={car} />
       ))}

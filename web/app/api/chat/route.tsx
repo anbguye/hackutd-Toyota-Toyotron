@@ -36,10 +36,17 @@ async function getUserPreferences(userId: string) {
   }
 }
 
-function buildSystemPrompt(preferences: Awaited<ReturnType<typeof getUserPreferences>>) {
+function buildSystemPrompt(
+  preferences: Awaited<ReturnType<typeof getUserPreferences>>,
+  userContext?: { email?: string | null },
+) {
   let systemPrompt =
     "You are a helpful Toyota shopping assistant. Provide accurate, concise answers about Toyota models, pricing, financing, and ownership. If you are unsure, encourage the user to check with a Toyota dealer.\n\n";
   systemPrompt += "Respond to the user in Markdown format. Use formatting like **bold**, *italic*, lists, and other Markdown features to make your responses clear and well-structured.\n\n";
+
+  if (userContext?.email) {
+    systemPrompt += `USER CONTEXT:\n- The authenticated user's preferred email address is ${userContext.email}.\n- Automatically use this address when sending summaries, recommendations, confirmations, or follow-ups unless the user explicitly provides a different email.\n- Do not ask the user to repeat their email unless they state they want to use another address.\n\n`;
+  }
   systemPrompt +=
     "⚠️ CRITICAL RULE: NEVER make claims about vehicle availability, pricing, or whether vehicles exist WITHOUT FIRST calling the searchToyotaTrims tool to check the actual database. Your training data may be outdated or incorrect - ALWAYS verify with the database first.\n\n";
   systemPrompt +=
@@ -319,6 +326,8 @@ export async function POST(req: Request) {
     console.error("[chat/route] Failed to get user:", error);
   }
 
+  const userEmailContext = currentUser ? { email: currentUser.email ?? null } : undefined;
+
   const openrouter = createOpenRouter({
     apiKey,
     headers: {
@@ -348,7 +357,9 @@ export async function POST(req: Request) {
         // Return static knowledge response directly without LLM call
         const result = streamText({
           model: openrouter.chat("nvidia/llama-3.3-nemotron-super-49b-v1.5"),
-          system: buildSystemPrompt(preferences) + "\n\nYou are providing information from Toyota's knowledge base. Be helpful and conversational. Use the provided knowledge to answer the user's question.",
+          system:
+            buildSystemPrompt(preferences, userEmailContext) +
+            "\n\nYou are providing information from Toyota's knowledge base. Be helpful and conversational. Use the provided knowledge to answer the user's question.",
           messages: [
             ...convertToModelMessages(body.messages.slice(0, -1)),
             {
@@ -371,7 +382,9 @@ export async function POST(req: Request) {
       if (decision.type === "finance_only") {
         const result = streamText({
           model: openrouter.chat("nvidia/llama-3.3-nemotron-super-49b-v1.5"),
-          system: buildSystemPrompt(preferences) + `\n\nThe user is asking about financing for a vehicle priced at $${decision.vehiclePrice.toLocaleString()}. You MUST call the estimateFinance tool with vehiclePrice: ${decision.vehiclePrice}.`,
+          system:
+            buildSystemPrompt(preferences, userEmailContext) +
+            `\n\nThe user is asking about financing for a vehicle priced at $${decision.vehiclePrice.toLocaleString()}. You MUST call the estimateFinance tool with vehiclePrice: ${decision.vehiclePrice}.`,
           messages: convertToModelMessages(body.messages),
           stopWhen: stepCountIs(3),
           tools: toolsWithContext,
@@ -400,7 +413,8 @@ export async function POST(req: Request) {
           );
 
           // Create enhanced system prompt with vehicle data
-          const enhancedSystemPrompt = buildSystemPrompt(preferences) + 
+          const enhancedSystemPrompt =
+            buildSystemPrompt(preferences, userEmailContext) +
             `\n\nMULTI-AGENT SYSTEM RESULTS:\n` +
             `Task: ${JSON.stringify(decision.task, null, 2)}\n` +
             `Vehicles found: ${vehiclesWithFinance.length}\n` +
@@ -427,7 +441,7 @@ export async function POST(req: Request) {
     // Standard tool-based approach for other queries (orchestrator returned "standard_chat")
     const result = streamText({
       model: openrouter.chat("nvidia/llama-3.3-nemotron-super-49b-v1.5"),
-      system: buildSystemPrompt(preferences),
+      system: buildSystemPrompt(preferences, userEmailContext),
       messages: convertToModelMessages(body.messages),
       stopWhen: stepCountIs(10),
       tools: toolsWithContext,

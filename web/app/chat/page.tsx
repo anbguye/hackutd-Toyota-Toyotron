@@ -148,7 +148,6 @@ export default function ChatPage() {
   const lastSpokenMessageIdRef = useRef<string | null>(null);
   const voiceMessageBufferRef = useRef<string>("");
   const streamingTextRef = useRef<string>("");
-  const lastProcessedMessageIdRef = useRef<string | null>(null);
 
   // Get auth token from Supabase session and load preferences
   // Initialize voice managers
@@ -536,98 +535,148 @@ export default function ChatPage() {
     }
   }, [displayMessages, isVoiceMode, isStreaming]);
 
-  // Update agent workflow steps based on tool states in messages
+  // Update agent workflow steps based on tool usage across the conversation
   useEffect(() => {
-    const lastMessage = displayMessages[displayMessages.length - 1];
-    if (!lastMessage) {
-      return;
-    }
-
-    // Skip if we've already processed this message
-    if (lastMessage.id === lastProcessedMessageIdRef.current) {
-      return;
-    }
-
-    // Only process agent messages with tool parts
-    if (lastMessage.role === "user" || !lastMessage.parts) {
-      // Clear workflow if no active tool calls
-      if (agentWorkflowSteps && lastMessage.role === "user") {
+    if (displayMessages.length === 0) {
+      if (agentWorkflowSteps !== null) {
         setAgentWorkflowSteps(null);
-        lastProcessedMessageIdRef.current = lastMessage.id;
       }
       return;
     }
 
-    const parts = lastMessage.parts;
-    
-    // Check for searchToyotaTrims tool
-    const searchPart = parts.find((p: any) => p.type === "tool-searchToyotaTrims");
-    if (searchPart) {
-      if (searchPart.state === "input-available") {
-        setAgentWorkflowSteps([
-          { name: "Intent Agent", description: "Understanding your request", status: "completed" },
-          { name: "Vehicle Agent", description: "Searching Toyota database", status: "active" },
-          { name: "Finance Agent", description: "Calculating financing options", status: "pending" },
-          { name: "Report Agent", description: "Preparing recommendations", status: "pending" },
-        ]);
-        lastProcessedMessageIdRef.current = lastMessage.id;
-        return;
-      } else if (searchPart.state === "output-available") {
-        setAgentWorkflowSteps([
-          { name: "Intent Agent", description: "Understanding your request", status: "completed" },
-          { name: "Vehicle Agent", description: "Searching Toyota database", status: "completed" },
-          { name: "Finance Agent", description: "Calculating financing options", status: "active" },
-          { name: "Report Agent", description: "Preparing recommendations", status: "pending" },
-        ]);
-        lastProcessedMessageIdRef.current = lastMessage.id;
-        return;
+    type StepStatus = "pending" | "active" | "completed";
+    type StepKey = "intent" | "vehicle" | "finance" | "report";
+
+    const statuses: Record<StepKey, StepStatus> = {
+      intent: "pending",
+      vehicle: "pending",
+      finance: "pending",
+      report: "pending",
+    };
+
+    const latestToolStates: Record<"vehicle" | "finance" | "report", { state?: string; output?: any } | null> = {
+      vehicle: null,
+      finance: null,
+      report: null,
+    };
+
+    const hadAgentTools = displayMessages.some(
+      (message) => message.role === "agent" && Array.isArray(message.parts) && message.parts.length > 0,
+    );
+
+    if (hadAgentTools) {
+      statuses.intent = "completed";
+    }
+
+    for (const message of displayMessages) {
+      if (message.role !== "agent" || !message.parts) {
+        continue;
+      }
+
+      for (const part of message.parts as any[]) {
+        switch (part.type) {
+          case "tool-searchToyotaTrims":
+            latestToolStates.vehicle = { state: part.state, output: part.output };
+            break;
+          case "tool-estimateFinance":
+            latestToolStates.finance = { state: part.state, output: part.output };
+            break;
+          case "tool-displayCarRecommendations":
+          case "tool-sendEmailHtml":
+          case "tool-scheduleTestDrive":
+            latestToolStates.report = { state: part.state, output: part.output };
+            break;
+          default:
+            break;
+        }
       }
     }
 
-    // Check for displayCarRecommendations tool
-    const displayPart = parts.find((p: any) => p.type === "tool-displayCarRecommendations");
-    if (displayPart) {
-      if (displayPart.state === "input-available") {
-        setAgentWorkflowSteps([
-          { name: "Intent Agent", description: "Understanding your request", status: "completed" },
-          { name: "Vehicle Agent", description: "Searching Toyota database", status: "completed" },
-          { name: "Finance Agent", description: "Calculating financing options", status: "completed" },
-          { name: "Report Agent", description: "Preparing recommendations", status: "active" },
-        ]);
-        lastProcessedMessageIdRef.current = lastMessage.id;
-        return;
-      } else if (displayPart.state === "output-available") {
-        setAgentWorkflowSteps([
-          { name: "Intent Agent", description: "Understanding your request", status: "completed" },
-          { name: "Vehicle Agent", description: "Searching Toyota database", status: "completed" },
-          { name: "Finance Agent", description: "Calculating financing options", status: "completed" },
-          { name: "Report Agent", description: "Preparing recommendations", status: "completed" },
-        ]);
-        lastProcessedMessageIdRef.current = lastMessage.id;
-        // Clear after delay
-        setTimeout(() => setAgentWorkflowSteps(null), 3000);
-        return;
+    const mapToolStateToStatus = (entry: { state?: string; output?: any } | null): StepStatus | null => {
+      if (!entry?.state) return null;
+      const { state, output } = entry;
+
+      if (state === "input-available" || state === "call-started" || state === "submitted") {
+        return "active";
       }
+
+      if (state === "output-available") {
+        if (output && typeof output === "object" && "success" in output && output.success === false) {
+          return "active";
+        }
+        return "completed";
+      }
+
+      if (state === "output-error" || state === "errored") {
+        return "active";
+      }
+
+      return null;
+    };
+
+    const vehicleStatus = mapToolStateToStatus(latestToolStates.vehicle);
+    if (vehicleStatus) {
+      statuses.intent = "completed";
+      statuses.vehicle = vehicleStatus;
     }
-  }, [displayMessages]);
+
+    const financeStatus = mapToolStateToStatus(latestToolStates.finance);
+    if (financeStatus) {
+      statuses.intent = "completed";
+      if (statuses.vehicle === "pending") {
+        statuses.vehicle = "completed";
+      }
+      statuses.finance = financeStatus;
+    }
+
+    const reportStatus = mapToolStateToStatus(latestToolStates.report);
+    if (reportStatus) {
+      statuses.intent = "completed";
+      if (statuses.vehicle === "pending") {
+        statuses.vehicle = "completed";
+      }
+      statuses.report = reportStatus;
+    }
+
+    const newSteps = [
+      { name: "Intent Agent", description: "Understanding your request", status: statuses.intent },
+      { name: "Vehicle Agent", description: "Searching Toyota database", status: statuses.vehicle },
+      { name: "Finance Agent", description: "Calculating financing options", status: statuses.finance },
+      { name: "Report Agent", description: "Preparing recommendations", status: statuses.report },
+    ] as Array<{ name: string; description: string; status: StepStatus }>;
+
+    const stepsChanged =
+      !agentWorkflowSteps ||
+      agentWorkflowSteps.length !== newSteps.length ||
+      agentWorkflowSteps.some(
+        (step, index) =>
+          step.name !== newSteps[index].name ||
+          step.description !== newSteps[index].description ||
+          step.status !== newSteps[index].status,
+      );
+
+    if (stepsChanged) {
+      setAgentWorkflowSteps(newSteps);
+    }
+  }, [agentWorkflowSteps, displayMessages]);
 
   return (
     <RequireAuth>
-      <div className="flex h-[calc(100vh-var(--header-h,80px))] flex-col bg-background text-foreground overflow-hidden">
-        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-          <div className="toyota-container flex flex-col h-full max-w-4xl mx-auto w-full py-6 px-4 overflow-hidden">
-            {/* Fixed header section */}
-            <div className="mb-6 space-y-4 flex-shrink-0">
-              <div className="rounded-3xl border border-border/70 bg-card/70 px-6 py-5 backdrop-blur">
-                <div className="flex items-start gap-4">
-                  <div className="rounded-full bg-primary/10 p-3 text-primary">
-                    <Sparkles className="h-5 w-5" />
+      <div className="flex h-[calc(100vh-var(--header-h,80px))] bg-background text-foreground overflow-hidden">
+        <div className="flex-1 flex min-h-0 overflow-hidden">
+          {/* Sidebar */}
+          <aside className="hidden lg:flex flex-col w-72 shrink-0 border-r border-border/70 bg-background/50 overflow-y-auto">
+            <div className="p-5 space-y-5">
+              <div className="rounded-2xl border border-border/70 bg-card/70 px-4 py-4 backdrop-blur">
+                <div className="flex items-start gap-3">
+                  <div className="rounded-full bg-primary/10 p-2 text-primary shrink-0">
+                    <Sparkles className="h-3.5 w-3.5" />
                   </div>
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
+                  <div className="space-y-1.5 min-w-0 flex-1">
+                    <p className="text-xs font-semibold uppercase tracking-[0.25em] text-muted-foreground">
                       Toyota agent live
                     </p>
-                    <h2 className="text-lg font-semibold text-secondary">
+                    <h2 className="text-xs font-semibold text-secondary leading-relaxed break-words">
                       Ask anything about Toyota pricing, trims, or ownership. Responses adapt to your quiz and browsing.
                     </h2>
                   </div>
@@ -635,260 +684,320 @@ export default function ChatPage() {
               </div>
               
               {/* Retell Voice Call Section */}
-              <div className="rounded-3xl border border-primary/30 bg-gradient-to-br from-primary/5 to-primary/10 px-6 py-5 backdrop-blur">
-                <div className="flex items-start gap-4">
-                  <div className="rounded-full bg-primary/20 p-3 text-primary">
-                    <Phone className="h-5 w-5" />
+              <div className="rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/5 to-primary/10 px-4 py-4 backdrop-blur">
+                <div className="flex items-start gap-3">
+                  <div className="rounded-full bg-primary/20 p-2 text-primary shrink-0">
+                    <Phone className="h-3.5 w-3.5" />
                   </div>
-                  <div className="flex-1 space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-[0.3em] text-primary">
+                  <div className="flex-1 space-y-1.5 min-w-0">
+                    <p className="text-xs font-semibold uppercase tracking-[0.25em] text-primary">
                       Prefer to talk?
                     </p>
                     <div className="space-y-1">
-                      <h3 className="text-base font-semibold text-secondary">
+                      <h3 className="text-xs font-semibold text-secondary">
                         Chat or CALL our agent
                       </h3>
-                      <p className="text-sm text-muted-foreground">
-                        Call <a href="tel:1-800-TOYOTA" className="font-semibold text-primary hover:underline">1-800-TOYOTA</a> to speak with our voice agent powered by Retell. Ask about vehicles, get financing options, or schedule a test drive—all through natural conversation.
+                      <p className="text-xs text-muted-foreground leading-relaxed break-words">
+                        Call <a href="tel:1-800-TOYOTA" className="font-semibold text-primary hover:underline">1-800-TOYOTA</a> to speak with our voice agent powered by Retell.
                       </p>
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* Scrollable chat container with fixed height */}
-            <div className="relative flex-1 min-h-0 flex flex-col rounded-4xl border border-border/70 bg-card/60 backdrop-blur">
-              <div className="flex-1 min-h-0 overflow-hidden">
-                <ScrollArea className="h-full">
-                  <div className="p-8 space-y-6">
-                  {/* Persistent Agent Workflow Display */}
-                  {agentWorkflowSteps && (
-                    <div className="mb-4">
-                      <AgentWorkflow steps={agentWorkflowSteps} />
-                    </div>
-                  )}
-                  {loadingPreferences && (
-                    <div className="flex gap-4 justify-start items-center">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                        <Bot className="h-5 w-5" />
-                      </div>
-                      <div className="flex max-w-[82%] flex-col gap-3 items-start">
-                        <div className="rounded-3xl border border-border/70 bg-background/90 px-6 py-4">
-                          <div className="flex items-center gap-3">
-                            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                            <span className="text-sm text-muted-foreground">Loading your preferences...</span>
+              {/* Multi-Agent System Workflow */}
+              <AgentWorkflow 
+                steps={agentWorkflowSteps || [
+                  { name: "Intent Agent", description: "Understanding your request", status: "pending" },
+                  { name: "Vehicle Agent", description: "Searching Toyota database", status: "pending" },
+                  { name: "Finance Agent", description: "Calculating financing options", status: "pending" },
+                  { name: "Report Agent", description: "Preparing recommendations", status: "pending" },
+                ]} 
+              />
+            </div>
+          </aside>
+
+          {/* Main chat area */}
+          <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+            <div className="toyota-container flex flex-col h-full max-w-7xl mx-auto w-full py-4 px-4 overflow-hidden">
+              {/* Scrollable chat container with fixed height */}
+              <div className="relative flex-1 min-h-0 flex flex-col rounded-4xl border border-border/70 bg-card/60 backdrop-blur">
+                <div className="flex-1 min-h-0 overflow-hidden">
+                  <ScrollArea className="h-full">
+                    <div className="p-3 space-y-2.5">
+                      {loadingPreferences && (
+                        <div className="flex gap-3 justify-start items-center">
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                            <Bot className="h-4 w-4" />
+                          </div>
+                          <div className="flex max-w-[82%] flex-col gap-2 items-start">
+                            <div className="rounded-2xl border border-border/70 bg-background/90 px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                                <span className="text-xs text-muted-foreground">Loading your preferences...</span>
+                              </div>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </div>
-                  )}
-                  {displayMessages.map((message, i) => {
-                    const isUser = message.role === "user";
-                    const isLastMessage = i === displayMessages.length - 1;
-                    const showBotIcon = !isUser && (message.content || message.parts?.length) && !(isLastMessage && isWaitingForBotResponse);
-                    return (
-                      <div key={message.id ?? i} className={`flex gap-4 ${isUser ? "justify-end" : "justify-start"}`}>
-                        {showBotIcon && (
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                            <Bot className="h-5 w-5" />
-                          </div>
-                        )}
-                        {!isUser && !showBotIcon && (
-                          <div className="flex h-10 w-10 shrink-0" />
-                        )}
-                        <div className={`flex max-w-[82%] flex-col gap-3 ${isUser ? "items-end" : "items-start"}`}>
-                          {message.content && (
-                            <div
-                              className={`rounded-3xl px-6 py-4 text-sm leading-relaxed prose prose-sm max-w-none ${
-                                isUser
-                                  ? "bg-primary text-primary-foreground shadow-[0_24px_48px_-32px_rgba(235,10,30,0.6)]"
-                                  : "border border-border/70 bg-background/90"
-                              }`}
-                            >
-                              {isUser ? (
-                                message.content
-                              ) : (
-                                <MemoizedMarkdown content={message.content} id={message.id ?? `msg-${i}`} />
+                      )}
+                      {displayMessages.map((message, i) => {
+                        const isUser = message.role === "user";
+                        const isLastMessage = i === displayMessages.length - 1;
+                        const showBotIcon = !isUser && (message.content || message.parts?.length) && !(isLastMessage && isWaitingForBotResponse);
+                        return (
+                          <div key={message.id ?? i} className={`flex gap-3 ${isUser ? "justify-end" : "justify-start"}`}>
+                            {showBotIcon && (
+                              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                                <Bot className="h-4 w-4" />
+                              </div>
+                            )}
+                            {!isUser && !showBotIcon && (
+                              <div className="flex h-8 w-8 shrink-0" />
+                            )}
+                            <div className={`flex max-w-[90%] flex-col gap-1.5 ${isUser ? "items-end" : "items-start"}`}>
+                              {message.content && (
+                                <div
+                                  className={`rounded-2xl px-3 py-2.5 text-xs leading-relaxed prose prose-sm max-w-none ${
+                                    isUser
+                                      ? "bg-primary text-primary-foreground shadow-[0_24px_48px_-32px_rgba(235,10,30,0.6)]"
+                                      : "border border-border/70 bg-background/90"
+                                  }`}
+                                >
+                                  {isUser ? (
+                                    message.content
+                                  ) : (
+                                    <MemoizedMarkdown content={message.content} id={message.id ?? `msg-${i}`} />
+                                  )}
+                                </div>
                               )}
-                            </div>
-                          )}
-                          {message.parts && !isUser && (
-                            <div className="w-full space-y-4">
-                              {message.parts.map((part, partIndex) => {
-                                // Handle searchToyotaTrims tool
-                                if (part.type === "tool-searchToyotaTrims") {
-                                  switch (part.state) {
-                                    case "input-available":
-                                      return (
-                                        <div key={partIndex} className="flex items-center gap-2 text-sm text-muted-foreground">
-                                          <Loader2 className="h-4 w-4 animate-spin" />
-                                          <span>Searching for cars...</span>
-                                        </div>
-                                      );
-                                    case "output-available":
-                                      // Search completed, but we don't display the results here
-                                      // The LLM will call displayCarRecommendations with selected items
-                                      return null;
-                                    case "output-error":
-                                      return (
-                                        <div key={partIndex} className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
-                                          <p className="font-semibold">Error searching for cars</p>
-                                          <p className="mt-1 text-xs">{part.errorText || "Unknown error"}</p>
-                                        </div>
-                                      );
-                                    default:
-                                      return null;
-                                  }
-                                }
-
-                                // Handle displayCarRecommendations tool
-                                if (part.type === "tool-displayCarRecommendations") {
-                                  switch (part.state) {
-                                    case "input-available":
-                                      return (
-                                        <div key={partIndex} className="flex items-center gap-2 text-sm text-muted-foreground">
-                                          <Loader2 className="h-4 w-4 animate-spin" />
-                                          <span>Loading car recommendations...</span>
-                                        </div>
-                                      );
-                                    case "output-available":
-                                      if (part.output?.items) {
-                                        return (
-                                          <div key={partIndex} className="w-full">
-                                            <CarRecommendations items={part.output.items} />
-                                          </div>
-                                        );
+                              {message.parts && !isUser && (
+                                <div className="w-full space-y-2.5">
+                                  {message.parts.map((part, partIndex) => {
+                                    // Handle searchToyotaTrims tool
+                                    if (part.type === "tool-searchToyotaTrims") {
+                                      switch (part.state) {
+                                        case "input-available":
+                                          return (
+                                            <div key={partIndex} className="flex items-center gap-2 text-xs text-muted-foreground">
+                                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                              <span>Searching for cars...</span>
+                                            </div>
+                                          );
+                                        case "output-available":
+                                          // Search completed, but we don't display the results here
+                                          // The LLM will call displayCarRecommendations with selected items
+                                          return null;
+                                        case "output-error":
+                                          return (
+                                            <div key={partIndex} className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-xs text-destructive">
+                                              <p className="font-semibold">Error searching for cars</p>
+                                              <p className="mt-1 text-xs">{part.errorText || "Unknown error"}</p>
+                                            </div>
+                                          );
+                                        default:
+                                          return null;
                                       }
-                                      return null;
-                                    case "output-error":
-                                      const errorMsg = part.errorText || "Unknown error";
-                                      const isValidationError = errorMsg.includes("validation") || errorMsg.includes("Required") || errorMsg.includes("items");
-                                      return (
-                                        <div key={partIndex} className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
-                                          <p className="font-semibold">Error loading car recommendations</p>
-                                          <p className="mt-1 text-xs">{errorMsg}</p>
-                                          {isValidationError && (
-                                            <p className="mt-2 text-xs text-muted-foreground">
-                                              The assistant needs to first search for cars, then select items from the results to display.
-                                            </p>
-                                          )}
-                                        </div>
-                                      );
-                                    default:
-                                      return null;
-                                  }
-                                }
+                                    }
 
-                                // Handle scheduleTestDrive tool
-                                if (part.type === "tool-scheduleTestDrive") {
-                                  switch (part.state) {
-                                    case "input-available":
-                                      return (
-                                        <div key={partIndex} className="flex items-center gap-2 text-sm text-muted-foreground">
-                                          <Loader2 className="h-4 w-4 animate-spin" />
-                                          <span>Scheduling test drive...</span>
-                                        </div>
-                                      );
-                                    case "output-available":
-                                      const output = part.output as any;
-                                      if (output?.success) {
-                                        return (
-                                          <div key={partIndex} className="rounded-lg border border-primary/30 bg-primary/5 p-4 text-sm">
-                                            <div className="flex items-start gap-3">
-                                              <CheckCircle className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-                                              <div className="flex-1 space-y-2">
-                                                <p className="font-semibold text-secondary">Test drive scheduled!</p>
-                                                {output.details && (
-                                                  <div className="space-y-1 text-xs text-muted-foreground">
-                                                    <p><span className="font-medium">Vehicle:</span> {output.details.vehicle}</p>
-                                                    <p><span className="font-medium">Date:</span> {output.details.date}</p>
-                                                    <p><span className="font-medium">Time:</span> {output.details.time}</p>
-                                                    <p><span className="font-medium">Location:</span> {output.details.location}</p>
+                                    // Handle displayCarRecommendations tool
+                                    if (part.type === "tool-displayCarRecommendations") {
+                                      switch (part.state) {
+                                        case "input-available":
+                                          return (
+                                            <div key={partIndex} className="flex items-center gap-2 text-xs text-muted-foreground">
+                                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                              <span>Loading car recommendations...</span>
+                                            </div>
+                                          );
+                                        case "output-available":
+                                          if (part.output?.items) {
+                                            return (
+                                              <div key={partIndex} className="w-full">
+                                                <CarRecommendations items={part.output.items} />
+                                              </div>
+                                            );
+                                          }
+                                          return null;
+                                        case "output-error":
+                                          const errorMsg = part.errorText || "Unknown error";
+                                          const isValidationError = errorMsg.includes("validation") || errorMsg.includes("Required") || errorMsg.includes("items");
+                                          return (
+                                            <div key={partIndex} className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-xs text-destructive">
+                                              <p className="font-semibold">Error loading car recommendations</p>
+                                              <p className="mt-1 text-xs">{errorMsg}</p>
+                                              {isValidationError && (
+                                                <p className="mt-2 text-xs text-muted-foreground">
+                                                  The assistant needs to first search for cars, then select items from the results to display.
+                                                </p>
+                                              )}
+                                            </div>
+                                          );
+                                        default:
+                                          return null;
+                                      }
+                                    }
+
+                                    // Handle sendEmailHtml tool
+                                    if (part.type === "tool-sendEmailHtml") {
+                                      switch (part.state) {
+                                        case "input-available":
+                                          return (
+                                            <div key={partIndex} className="flex items-center gap-2 text-xs text-muted-foreground">
+                                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                              <span>Sending email...</span>
+                                            </div>
+                                          );
+                                        case "output-available":
+                                          const emailOutput = part.output as any;
+                                          if (emailOutput?.success) {
+                                            return (
+                                              <div key={partIndex} className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-xs">
+                                                <div className="flex items-start gap-2">
+                                                  <CheckCircle className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                                                  <div className="flex-1 space-y-1">
+                                                    <p className="font-semibold text-secondary">Email sent successfully!</p>
+                                                    <p className="text-xs text-muted-foreground">
+                                                      Sent to {Array.isArray(emailOutput.to) ? emailOutput.to.join(", ") : emailOutput.to}
+                                                    </p>
+                                                    {emailOutput.subject && (
+                                                      <p className="text-xs text-muted-foreground">
+                                                        Subject: {emailOutput.subject}
+                                                      </p>
+                                                    )}
                                                   </div>
-                                                )}
-                                                {output.link && (
-                                                  <Link href={output.link} className="inline-flex items-center gap-2 mt-3 text-xs font-semibold text-primary hover:underline">
-                                                    <Calendar className="h-4 w-4" />
-                                                    View test drive details
+                                                </div>
+                                              </div>
+                                            );
+                                          } else {
+                                            return (
+                                              <div key={partIndex} className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-xs text-destructive">
+                                                <p className="font-semibold">Error sending email</p>
+                                                <p className="mt-1 text-xs">{emailOutput?.error || "Unknown error"}</p>
+                                              </div>
+                                            );
+                                          }
+                                        case "output-error":
+                                          return (
+                                            <div key={partIndex} className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-xs text-destructive">
+                                              <p className="font-semibold">Error sending email</p>
+                                              <p className="mt-1 text-xs">{part.errorText || "Unknown error"}</p>
+                                            </div>
+                                          );
+                                        default:
+                                          return null;
+                                      }
+                                    }
+
+                                    // Handle scheduleTestDrive tool
+                                    if (part.type === "tool-scheduleTestDrive") {
+                                      switch (part.state) {
+                                        case "input-available":
+                                          return (
+                                            <div key={partIndex} className="flex items-center gap-2 text-xs text-muted-foreground">
+                                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                              <span>Scheduling test drive...</span>
+                                            </div>
+                                          );
+                                        case "output-available":
+                                          const output = part.output as any;
+                                          if (output?.success) {
+                                            return (
+                                              <div key={partIndex} className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-xs">
+                                                <div className="flex items-start gap-2">
+                                                  <CheckCircle className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                                                  <div className="flex-1 space-y-1.5">
+                                                    <p className="font-semibold text-secondary">Test drive scheduled!</p>
+                                                    {output.details && (
+                                                      <div className="space-y-0.5 text-xs text-muted-foreground">
+                                                        <p><span className="font-medium">Vehicle:</span> {output.details.vehicle}</p>
+                                                        <p><span className="font-medium">Date:</span> {output.details.date}</p>
+                                                        <p><span className="font-medium">Time:</span> {output.details.time}</p>
+                                                        <p><span className="font-medium">Location:</span> {output.details.location}</p>
+                                                      </div>
+                                                    )}
+                                                    {output.link && (
+                                                      <Link href={output.link} className="inline-flex items-center gap-1.5 mt-2 text-xs font-semibold text-primary hover:underline">
+                                                        <Calendar className="h-3.5 w-3.5" />
+                                                        View test drive details
+                                                      </Link>
+                                                    )}
+                                                    <p className="text-xs text-muted-foreground mt-1.5">You'll receive a confirmation email shortly.</p>
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            );
+                                          } else {
+                                            return (
+                                              <div key={partIndex} className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-xs text-destructive">
+                                                <p className="font-semibold">Error scheduling test drive</p>
+                                                <p className="mt-1 text-xs">{output?.error || "Unknown error"}</p>
+                                                {output?.link && (
+                                                  <Link href={output.link} className="mt-2 inline-block text-xs underline">
+                                                    Sign in to continue
                                                   </Link>
                                                 )}
-                                                <p className="text-xs text-muted-foreground mt-2">You'll receive a confirmation email shortly.</p>
                                               </div>
+                                            );
+                                          }
+                                        case "output-error":
+                                          return (
+                                            <div key={partIndex} className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-xs text-destructive">
+                                              <p className="font-semibold">Error scheduling test drive</p>
+                                              <p className="mt-1 text-xs">{part.errorText || "Unknown error"}</p>
                                             </div>
-                                          </div>
-                                        );
-                                      } else {
-                                        return (
-                                          <div key={partIndex} className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
-                                            <p className="font-semibold">Error scheduling test drive</p>
-                                            <p className="mt-1 text-xs">{output?.error || "Unknown error"}</p>
-                                            {output?.link && (
-                                              <Link href={output.link} className="mt-2 inline-block text-xs underline">
-                                                Sign in to continue
-                                              </Link>
-                                            )}
-                                          </div>
-                                        );
+                                          );
+                                        default:
+                                          return null;
                                       }
-                                    case "output-error":
-                                      return (
-                                        <div key={partIndex} className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
-                                          <p className="font-semibold">Error scheduling test drive</p>
-                                          <p className="mt-1 text-xs">{part.errorText || "Unknown error"}</p>
-                                        </div>
-                                      );
-                                    default:
-                                      return null;
-                                  }
-                                }
-                                return null;
-                              })}
+                                    }
+                                    return null;
+                                  })}
+                                </div>
+                              )}
+                              {/* Show loading indicator if streaming and no content yet, or if there are active tool calls */}
+                              {!isUser && isStreaming && !message.content && !message.parts?.length && (
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  <span>Thinking...</span>
+                                </div>
+                              )}
+                              {message.suggestions && (
+                                <div className="flex flex-wrap gap-1.5">
+                                  {message.suggestions.map((suggestion) => (
+                                    <Button
+                                      key={suggestion}
+                                      variant="outline"
+                                      size="sm"
+                                      className="rounded-full border-border/60 text-xs font-semibold text-muted-foreground hover:border-primary/70 hover:text-primary h-7 px-3"
+                                      onClick={() => setInput(suggestion)}
+                                    >
+                                      {suggestion}
+                                    </Button>
+                                  ))}
+                                </div>
+                              )}
                             </div>
-                          )}
-                          {/* Show loading indicator if streaming and no content yet, or if there are active tool calls */}
-                          {!isUser && isStreaming && !message.content && !message.parts?.length && (
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                              <span>Thinking...</span>
-                            </div>
-                          )}
-                          {message.suggestions && (
-                            <div className="flex flex-wrap gap-2">
-                              {message.suggestions.map((suggestion) => (
-                                <Button
-                                  key={suggestion}
-                                  variant="outline"
-                                  size="sm"
-                                  className="rounded-full border-border/60 text-xs font-semibold text-muted-foreground hover:border-primary/70 hover:text-primary"
-                                  onClick={() => setInput(suggestion)}
-                                >
-                                  {suggestion}
-                                </Button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                        {isUser && (
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-secondary text-secondary-foreground">
-                            <User className="h-5 w-5" />
+                            {isUser && (
+                              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary text-secondary-foreground">
+                                <User className="h-4 w-4" />
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                  {/* Show typing indicator when bot is processing and waiting for response */}
-                  {isWaitingForBotResponse && (
-                    <TypingIndicator />
-                  )}
-                  {/* Scroll anchor */}
-                  <div ref={messagesEndRef} />
+                        );
+                    })}
+                    {/* Show typing indicator when bot is processing and waiting for response */}
+                    {isWaitingForBotResponse && (
+                      <TypingIndicator />
+                    )}
+                    {/* Scroll anchor */}
+                    <div ref={messagesEndRef} />
                   </div>
                 </ScrollArea>
+                </div>
               </div>
 
               {/* Fixed input section at bottom */}
-              <div className="border-t border-border/60 bg-background/80 px-6 py-4 flex-shrink-0">
+              <div className="border-t border-border/60 bg-background/80 px-4 py-2.5 flex-shrink-0">
                 <div className="flex gap-3">
                   <Input
                     placeholder="Ask about Toyota models, deals, or ownership..."
@@ -901,7 +1010,7 @@ export default function ChatPage() {
                       }
                     }}
                     disabled={isListening}
-                    className="h-12 flex-1 rounded-full border-border/70 bg-card/80 px-5 disabled:opacity-60"
+                    className="h-10 flex-1 rounded-full border-border/70 bg-card/80 px-4 text-sm disabled:opacity-60"
                   />
                   <VoiceButton
                     isListening={isListening}
@@ -916,18 +1025,18 @@ export default function ChatPage() {
                     }}
                     size="icon"
                     disabled={isStreaming || isListening}
-                    className="h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-[0_24px_48px_-32px_rgba(235,10,30,0.6)] hover:bg-primary/90 disabled:opacity-60"
+                    className="h-10 w-10 rounded-full bg-primary text-primary-foreground shadow-[0_24px_48px_-32px_rgba(235,10,30,0.6)] hover:bg-primary/90 disabled:opacity-60"
                   >
-                    <Send className="h-5 w-5" />
+                    <Send className="h-4 w-4" />
                   </Button>
                 </div>
                 {error && (
-                  <p className="mt-3 text-center text-xs text-destructive">
+                  <p className="mt-2 text-center text-xs text-destructive">
                     Something went wrong. Please try again.
                   </p>
                 )}
                 {!error && (
-                  <p className="mt-3 text-center text-xs text-muted-foreground">
+                  <p className="mt-2 text-center text-xs text-muted-foreground">
                     Toyota Agent cross-checks real Toyota data—pricing, incentives, safety, and availability.
                   </p>
                 )}
@@ -939,3 +1048,4 @@ export default function ChatPage() {
     </RequireAuth>
   );
 }
+

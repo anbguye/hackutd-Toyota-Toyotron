@@ -45,30 +45,179 @@ const displayCarRecommendationsTool = tool({
   },
 });
 
-const sendEmailHtmlTool = tool({
-  description:
-    "Send an email with raw HTML content via Resend. Use this tool PROACTIVELY after providing car recommendations or when the user shows interest in vehicles. Always include: (1) Car recommendations with images and links, (2) Financing options (monthly payments, loan terms) calculated using estimateFinance tool, (3) Leasing options (monthly lease payments), (4) Personalization based on conversation context. Use when the user explicitly requests or agrees to your proactive suggestion. Provide the recipient email address(es), subject line, and HTML content.",
-  inputSchema: sendEmailHtmlInputSchema,
-  execute: async (input) => {
-    console.log("[sendEmailHtml] Tool called with:", JSON.stringify({ ...input, html: input.html.substring(0, 100) + "..." }, null, 2));
-    try {
-      const result = await sendEmailHtml(input);
-      console.log("[sendEmailHtml] Email sent successfully:", result?.id);
-      return {
-        success: true,
-        id: result?.id,
-        to: input.to,
-        subject: input.subject,
-      };
-    } catch (error) {
-      console.error("[sendEmailHtml] Error sending email:", error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error occurred",
-      };
+const PLACEHOLDER_EMAILS = new Set([
+  "user@example.com",
+  "example@example.com",
+  "test@example.com",
+  "placeholder@example.com",
+]);
+
+function isPlaceholderEmail(email: string) {
+  const normalized = email.trim().toLowerCase();
+  if (PLACEHOLDER_EMAILS.has(normalized)) {
+    return true;
+  }
+  if (normalized.endsWith("@example.com") || normalized.includes("placeholder")) {
+    return true;
+  }
+  return false;
+}
+
+function dedupeEmails(emails: string[]) {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const email of emails) {
+    const normalized = email.toLowerCase();
+    if (!seen.has(normalized)) {
+      seen.add(normalized);
+      result.push(email);
     }
-  },
-});
+  }
+  return result;
+}
+
+function resolveRecipients(to: string | string[], userEmail?: string | null) {
+  let recipients = (Array.isArray(to) ? to : [to])
+    .map((email) => email?.trim())
+    .filter((email): email is string => Boolean(email));
+
+  let usedFallback = false;
+
+  if (userEmail) {
+    recipients = recipients.map((email) => {
+      if (isPlaceholderEmail(email)) {
+        usedFallback = true;
+        return userEmail;
+      }
+      return email;
+    });
+  }
+
+  recipients = dedupeEmails(recipients);
+
+  if (recipients.length > 0 && !userEmail) {
+    const hasNonPlaceholder = recipients.some((email) => !isPlaceholderEmail(email));
+    if (!hasNonPlaceholder) {
+      recipients = [];
+    }
+  }
+
+  if (recipients.length === 0 && userEmail) {
+    recipients = [userEmail];
+    usedFallback = true;
+  }
+
+  return { recipients, usedFallback };
+}
+
+function createSendEmailHtmlTool(user: { id: string; email?: string | null } | null) {
+  return tool({
+    description:
+      "Send an email with raw HTML content via Resend. Use this tool PROACTIVELY after providing car recommendations or when the user shows interest in vehicles. Always include: (1) Car recommendations with images and links, (2) Financing options (monthly payments, loan terms) calculated using estimateFinance tool, (3) Leasing options (monthly lease payments), (4) Personalization based on conversation context. Use when the user explicitly requests or agrees to your proactive suggestion. Provide the recipient email address(es), subject line, and HTML content.",
+    inputSchema: sendEmailHtmlInputSchema,
+    execute: async (input) => {
+      const startTime = Date.now();
+      const htmlPreview = input.html.length > 200 ? input.html.substring(0, 200) + "..." : input.html;
+
+      const { recipients, usedFallback } = resolveRecipients(input.to, user?.email);
+
+      if (recipients.length === 0) {
+        return {
+          success: false,
+          error: "No valid recipient email provided. Please provide an email address to send the summary.",
+        };
+      }
+
+      const finalTo = Array.isArray(input.to) ? recipients : recipients[0];
+      const finalInput = {
+        ...input,
+        to: finalTo,
+      };
+
+      console.log(
+        "[sendEmailHtml] Tool called with:",
+        JSON.stringify(
+          {
+            to: finalInput.to,
+            subject: finalInput.subject,
+            htmlLength: finalInput.html.length,
+            htmlPreview,
+            usedFallback,
+          },
+          null,
+          2,
+        ),
+      );
+
+      try {
+        // Add timeout handling (30 seconds max)
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => {
+            reject(new Error("Email sending timed out after 30 seconds"));
+          }, 30000);
+        });
+
+        const emailPromise = sendEmailHtml(finalInput);
+        const result = await Promise.race([emailPromise, timeoutPromise]);
+
+        const duration = Date.now() - startTime;
+        console.log(`[sendEmailHtml] Email sent successfully in ${duration}ms:`, result?.id, "to", finalInput.to);
+
+        return {
+          success: true,
+          id: result?.id,
+          to: finalInput.to,
+          subject: finalInput.subject,
+        };
+      } catch (error) {
+        const duration = Date.now() - startTime;
+        const errorDetails =
+          error instanceof Error
+            ? {
+                message: error.message,
+                name: error.name,
+                stack: error.stack?.substring(0, 500),
+              }
+            : { message: String(error) };
+
+        console.error(`[sendEmailHtml] Error sending email after ${duration}ms:`, {
+          ...errorDetails,
+          to: finalInput.to,
+        });
+
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+
+        // Provide more helpful error messages
+        if (errorMessage.includes("timeout") || errorMessage.includes("timed out")) {
+          return {
+            success: false,
+            error: "Email sending timed out. Please try again or check your internet connection.",
+          };
+        }
+
+        if (errorMessage.includes("RESEND_API_KEY") || errorMessage.includes("not configured")) {
+          return {
+            success: false,
+            error: "Email service is not configured. Please contact support.",
+          };
+        }
+
+        // Check for network errors
+        if (errorMessage.includes("fetch") || errorMessage.includes("network") || errorMessage.includes("ECONNREFUSED")) {
+          return {
+            success: false,
+            error: "Network error while sending email. Please check your connection and try again.",
+          };
+        }
+
+        return {
+          success: false,
+          error: errorMessage.length > 200 ? errorMessage.substring(0, 200) + "..." : errorMessage,
+        };
+      }
+    },
+  });
+}
 
 const estimateFinanceTool = tool({
   description:
@@ -466,6 +615,7 @@ function createScheduleTestDriveTool(user: { id: string; email?: string | null }
         }
 
         // Insert booking directly into database
+        // Note: Schema only supports base columns + vehicle details, not contact fields
         const baseInsert = {
           user_id: currentUser.id,
           car_id: vehicleData.trim_id,
@@ -476,9 +626,6 @@ function createScheduleTestDriveTool(user: { id: string; email?: string | null }
 
         const extendedInsert = {
           ...baseInsert,
-          contact_name: contactName,
-          contact_email: contactEmail,
-          contact_phone: contactPhone || "000-000-0000",
           vehicle_make: vehicleData.make ?? null,
           vehicle_model: vehicleData.model ?? null,
           vehicle_year: typeof vehicleData.model_year === "number" ? vehicleData.model_year : null,
@@ -582,7 +729,7 @@ function createScheduleTestDriveTool(user: { id: string; email?: string | null }
 export const tools = {
   searchToyotaTrims: searchToyotaTrimsTool,
   displayCarRecommendations: displayCarRecommendationsTool,
-  sendEmailHtml: sendEmailHtmlTool,
+  sendEmailHtml: createSendEmailHtmlTool(null),
   estimateFinance: estimateFinanceTool,
   scheduleTestDrive: scheduleTestDriveTool,
 } satisfies ToolSet;
@@ -592,7 +739,7 @@ export function createToolsWithUserContext(user: { id: string; email?: string | 
   return {
     searchToyotaTrims: searchToyotaTrimsTool,
     displayCarRecommendations: displayCarRecommendationsTool,
-    sendEmailHtml: sendEmailHtmlTool,
+    sendEmailHtml: createSendEmailHtmlTool(user),
     estimateFinance: estimateFinanceTool,
     scheduleTestDrive: createScheduleTestDriveTool(user, session),
   } satisfies ToolSet;
