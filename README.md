@@ -1,10 +1,10 @@
-# Toyota Agent
+# Toyotatron
 
-An AI-powered Toyota shopping companion built with Next.js and advanced multi-agent orchestration. Toyota Agent helps users discover, compare, and purchase Toyota vehicles through intelligent chat, guided discovery, and seamless test drive booking.
+An AI-powered Toyota shopping companion built with Next.js and advanced multi-agent orchestration. Toyotatron helps users discover, compare, and purchase Toyota vehicles through intelligent chat, guided discovery, and seamless test drive booking.
 
 ## Overview
 
-Toyota Agent is a complete car shopping experience platform submitted to HackUTD. It combines modern web technologies with NVIDIA's Nemotron AI model to create a multi-agent system that understands user preferences, searches a comprehensive Toyota database, calculates financing options, and facilitates test drive bookings—all through natural language conversation.
+Toyotatron is a complete car shopping experience platform submitted to HackUTD. It combines modern web technologies with NVIDIA's Nemotron AI model to create a multi-agent system that understands user preferences, searches a comprehensive Toyota database, calculates financing options, and facilitates test drive bookings—all through natural language conversation.
 
 The platform features a beautifully designed Toyota-branded interface built with Next.js 16, React 19, and Tailwind CSS v4, backed by Supabase for authentication and data persistence, and powered by NVIDIA Nemotron for intelligent multi-agent reasoning.
 
@@ -333,7 +333,7 @@ RETELL_API_KEY=key_...
 RESEND_API_KEY=re_...
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
 OPENROUTER_SITE_URL=http://localhost:3000
-OPENROUTER_APP_NAME="Toyota Agent"
+OPENROUTER_APP_NAME="Toyotatron"
 ```
 
 ### Environment Variables Reference
@@ -636,4 +636,4 @@ MIT - See LICENSE file for details
 
 ## Contact & Support
 
-Built with Next.js, React, and NVIDIA Nemotron for HackUTD. Toyota Agent transforms car shopping from a complex, time-consuming process into an intelligent, conversational experience.
+Built with Next.js, React, and NVIDIA Nemotron for HackUTD. Toyotatron transforms car shopping from a complex, time-consuming process into an intelligent, conversational experience.
