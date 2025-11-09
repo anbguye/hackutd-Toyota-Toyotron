@@ -142,7 +142,15 @@
 
 html {
   scroll-behavior: smooth;
-  scroll-padding-top: var(--header-h);
+}
+
+/* Hide default scrollbars while preserving scrollability */
+* {
+  scrollbar-width: none;
+}
+
+*::-webkit-scrollbar {
+  display: none;
 }
 
 @layer utilities {

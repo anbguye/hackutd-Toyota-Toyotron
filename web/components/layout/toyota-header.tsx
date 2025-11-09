@@ -1,4 +1,4 @@
-'use client'
+"use client";
 
 import * as React from 'react'
 import Image from 'next/image'
@@ -67,6 +67,11 @@ export function ToyotaHeader({
   const [isAuthenticated, setIsAuthenticated] = React.useState(initialIsAuthenticated ?? false)
   const [isLoggingOut, setIsLoggingOut] = React.useState(false)
   const router = useRouter()
+  const [mounted, setMounted] = React.useState(false)
+
+  React.useEffect(() => {
+    setMounted(true)
+  }, [])
 
   React.useEffect(() => {
     if (variant !== 'transparent') {
@@ -97,7 +102,7 @@ export function ToyotaHeader({
     })
     return () => {
       mounted = false
-      subscription.subscription.unsubscribe()
+      subscription?.subscription.unsubscribe()
     }
   }, [])
 
@@ -127,7 +132,7 @@ export function ToyotaHeader({
     : 'text-zinc-700 hover:text-zinc-900'
 
   return (
-    <header className={headerClasses}>
+    <header data-sticky-header className={headerClasses}>
       <div className="toyota-container flex h-20 items-center justify-between gap-6">
         <Link href="/" className="flex items-center gap-4">
           <span className="relative flex items-center gap-3">
@@ -183,72 +188,90 @@ export function ToyotaHeader({
         </div>
 
         <div className="lg:hidden">
-          <Sheet>
-            <SheetTrigger asChild>
-              <Button
-                variant="outline"
-                size="icon"
-                className={cn(
-                  'rounded-full border-border/70 bg-white text-zinc-900 shadow-sm hover:bg-white/90',
-                  showTransparent && 'bg-white/90',
-                )}
-              >
-                <Menu className="h-5 w-5" />
-                <span className="sr-only">Open navigation</span>
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="right" className="bg-white text-zinc-900">
-              <div className="flex flex-col gap-10 px-1 py-10">
-                <Link href="/" className="flex items-center gap-3">
-                  <span className="relative block h-9 w-28">
-                    <Image
-                      src="/Toyota_Logo.svg"
-                      alt="Toyota"
-                      fill
-                      className="object-contain"
-                      priority
-                    />
-                  </span>
-                </Link>
-                <div className="flex flex-col gap-6">
-                  {navItems.map((item) => (
-                    <Link key={item.href} href={item.href} className="text-lg font-semibold text-zinc-800">
-                      {item.label}
-                    </Link>
-                  ))}
-                </div>
-                <div className="flex flex-col gap-3">
-                  {isAuthenticated ? (
-                    <Button
-                      onClick={handleLogout}
-                      disabled={isLoggingOut}
-                      variant="outline"
-                      className="h-10 w-full rounded-full border-zinc-700 text-base font-semibold text-zinc-700 hover:bg-zinc-50"
-                    >
-                      <LogOut className="h-4 w-4" />
-                      <span>{isLoggingOut ? 'Logging out...' : 'Logout'}</span>
-                    </Button>
-                  ) : (
-                    secondaryLinks.map((link) => (
-                      <Link key={link.href} href={link.href} className="text-base font-semibold text-zinc-700">
-                        {link.label}
-                      </Link>
-                    ))
+          {mounted ? (
+            <Sheet>
+              <SheetTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className={cn(
+                    'rounded-full border-border/70 bg-white text-zinc-900 shadow-sm hover:bg-white/90',
+                    showTransparent && 'bg-white/90',
                   )}
-                  <Button
-                    asChild
-                    className="h-12 w-full rounded-full bg-[#EB0A1E] text-base font-semibold text-white shadow-[0_24px_44px_-26px_rgba(235,10,30,0.7)] hover:bg-[#cf091a]"
-                  >
-                    <Link href={isAuthenticated ? AUTHENTICATED_CTA.href : cta.href} className="inline-flex items-center justify-center gap-2">
-                      <span>{isAuthenticated ? AUTHENTICATED_CTA.label : cta.label}</span>
-                      <ArrowRight className="h-4 w-4" />
-                    </Link>
-                  </Button>
-                  {rightSlot && <div className="pt-2">{rightSlot}</div>}
+                >
+                  <Menu className="h-5 w-5" />
+                  <span className="sr-only">Open navigation</span>
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="right" className="bg-white text-zinc-900">
+                <div className="flex flex-col gap-10 px-1 py-10">
+                  <Link href="/" className="flex items-center gap-3">
+                    <span className="relative block h-9 w-28">
+                      <Image
+                        src="/Toyota_Logo.svg"
+                        alt="Toyota"
+                        fill
+                        className="object-contain"
+                        priority
+                      />
+                    </span>
+                  </Link>
+                  <div className="flex flex-col gap-6">
+                    {navItems.map((item) => (
+                      <Link key={item.href} href={item.href} className="text-lg font-semibold text-zinc-800">
+                        {item.label}
+                      </Link>
+                    ))}
+                  </div>
+                  <div className="flex flex-col gap-3">
+                    {isAuthenticated ? (
+                      <Button
+                        onClick={handleLogout}
+                        disabled={isLoggingOut}
+                        variant="outline"
+                        className="h-10 w-full rounded-full border-zinc-700 text-base font-semibold text-zinc-700 hover:bg-zinc-50"
+                      >
+                        <LogOut className="h-4 w-4" />
+                        <span>{isLoggingOut ? 'Logging out...' : 'Logout'}</span>
+                      </Button>
+                    ) : (
+                      secondaryLinks.map((link) => (
+                        <Link key={link.href} href={link.href} className="text-base font-semibold text-zinc-700">
+                          {link.label}
+                        </Link>
+                      ))
+                    )}
+                    <Button
+                      asChild
+                      className="h-12 w-full rounded-full bg-[#EB0A1E] text-base font-semibold text-white shadow-[0_24px_44px_-26px_rgba(235,10,30,0.7)] hover:bg-[#cf091a]"
+                    >
+                      <Link
+                        href={isAuthenticated ? AUTHENTICATED_CTA.href : cta.href}
+                        className="inline-flex items-center justify-center gap-2"
+                      >
+                        <span>{isAuthenticated ? AUTHENTICATED_CTA.label : cta.label}</span>
+                        <ArrowRight className="h-4 w-4" />
+                      </Link>
+                    </Button>
+                    {rightSlot && <div className="pt-2">{rightSlot}</div>}
+                  </div>
                 </div>
-              </div>
-            </SheetContent>
-          </Sheet>
+              </SheetContent>
+            </Sheet>
+          ) : (
+            <Button
+              variant="outline"
+              size="icon"
+              className={cn(
+                'rounded-full border-border/70 bg-white text-zinc-900 shadow-sm hover:bg-white/90',
+                showTransparent && 'bg-white/90',
+              )}
+              aria-label="Open navigation"
+              aria-hidden="true"
+            >
+              <Menu className="h-5 w-5" />
+            </Button>
+          )}
         </div>
       </div>
     </header>

@@ -3,6 +3,8 @@ import type { Metadata } from "next"
 import { Inter, JetBrains_Mono } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { ToyotaHeader } from "@/components/layout/toyota-header"
+import ScrollOffset from "./_components/ScrollOffset"
+import HashAnchorFix from "./_components/HashAnchorFix"
 import "./globals.css"
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
@@ -50,9 +52,13 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${inter.className} antialiased`}>
+        <ScrollOffset />
+        <HashAnchorFix />
         <div className="flex min-h-screen flex-col bg-background">
           <ToyotaHeader navItems={NAV_ITEMS} secondaryLinks={SECONDARY_LINKS} />
-          <main className="flex-1 pt-24">{children}</main>
+          <main className="flex-1" style={{ paddingTop: "var(--header-h, 80px)" }}>
+            {children}
+          </main>
         </div>
         <Analytics />
       </body>

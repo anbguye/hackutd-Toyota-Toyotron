@@ -1,4 +1,4 @@
-'use client'
+"use client";
 
 import Image from "next/image"
 import Link from "next/link"
@@ -71,7 +71,10 @@ export default function LandingPage() {
         <div className="pointer-events-none absolute bottom-[-360px] left-[-200px] h-[620px] w-[620px] rounded-full bg-secondary/10 blur-[160px]" />
 
         <div className="space-y-32 pb-24 pt-8 sm:pt-12">
-          <section className="toyota-container grid grid-cols-1 items-center gap-8 lg:grid-cols-2">
+          <section
+            id="top"
+            className="toyota-container grid grid-cols-1 items-center gap-8 scroll-mt-24 md:scroll-mt-28 lg:scroll-mt-32 lg:grid-cols-2"
+          >
             <div className="space-y-10">
               <span className="toyota-chip">Toyota Agent</span>
               <div className="space-y-6">
@@ -84,20 +87,20 @@ export default function LandingPage() {
                 </p>
               </div>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <Link href="/signup">
+              <Link href="/signup">
                   <Button className="h-12 rounded-full px-7 text-base font-semibold shadow-[0_25px_45px_-28px_rgba(235,10,30,0.75)]">
                     Get started <ArrowRight className="ml-2 h-4 w-4" />
-                  </Button>
-                </Link>
-                <Link href="/browse">
+              </Button>
+            </Link>
+            <Link href="/browse">
                   <Button
                     variant="outline"
                     className="h-12 rounded-full border-border/70 px-7 text-base font-semibold hover:bg-muted/60"
                   >
                     Browse Toyota lineup
-                  </Button>
-                </Link>
-              </div>
+              </Button>
+            </Link>
+          </div>
               <div
                 className={cn(
                   "mt-6 rounded-2xl border border-border/70 bg-white/90 p-6 shadow backdrop-blur",
@@ -117,7 +120,7 @@ export default function LandingPage() {
                       <p className="text-sm text-muted-foreground/80">{stat.detail}</p>
                     </div>
                   ))}
-                </div>
+        </div>
               </div>
             </div>
 
@@ -131,11 +134,11 @@ export default function LandingPage() {
                   height={780}
                   priority
                 />
-              </div>
-            </div>
-          </section>
+          </div>
+        </div>
+      </section>
 
-          <section id="features" className="toyota-container space-y-14 scroll-mt-24 md:scroll-mt-28 lg:scroll-mt-32">
+          <section id="features" className="toyota-container space-y-14">
             <div className="max-w-3xl space-y-4">
               <span className="toyota-chip">Why Toyota Agent</span>
               <h2 className="text-pretty text-3xl font-black tracking-tight text-secondary sm:text-4xl">
@@ -154,22 +157,25 @@ export default function LandingPage() {
                   <div className="flex items-center gap-3">
                     <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
                       <feature.icon className="h-6 w-6" />
-                    </div>
+          </div>
                     <span className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
                       {feature.chip}
                     </span>
-                  </div>
+            </div>
                   <div className="space-y-3">
                     <h3 className="text-xl font-bold text-secondary">{feature.title}</h3>
                     <p className="text-sm text-muted-foreground">{feature.description}</p>
-                  </div>
+          </div>
                   <div className="mt-auto h-[1px] w-full rounded-full bg-gradient-to-r from-transparent via-primary/60 via-30% to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
-                </div>
-              ))}
-            </div>
-          </section>
+              </div>
+            ))}
+        </div>
+      </section>
 
-          <section className="toyota-container scroll-mt-24 md:scroll-mt-28 lg:scroll-mt-32" id="experience">
+          <section
+            id="experience"
+            className="toyota-container scroll-mt-24 md:scroll-mt-28 lg:scroll-mt-32"
+          >
             <div className="rounded-[2.5rem] border border-border/70 bg-card/80 p-10 shadow-[0_32px_75px_-50px_rgba(15,20,26,0.7)] backdrop-blur">
               <div className="flex flex-col gap-12 lg:flex-row">
                 <div className="max-w-sm space-y-6">
@@ -187,9 +193,9 @@ export default function LandingPage() {
                       className="rounded-full border-border/60 px-6 font-semibold hover:border-primary/60 hover:bg-primary/10"
                     >
                       Take the preference quiz
-                    </Button>
-                  </Link>
-                </div>
+            </Button>
+          </Link>
+        </div>
 
                 <div className="grid flex-1 gap-6 sm:grid-cols-2">
                   {experienceSteps.map((step) => (
@@ -209,7 +215,10 @@ export default function LandingPage() {
             </div>
           </section>
 
-          <section id="pricing" className="toyota-container grid gap-8 scroll-mt-24 md:scroll-mt-28 lg:scroll-mt-32 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
+          <section
+            id="pricing"
+            className="toyota-container grid gap-8 scroll-mt-24 md:scroll-mt-28 lg:scroll-mt-32 lg:grid-cols-[1.05fr_0.95fr] lg:items-center"
+          >
             <div className="space-y-6">
               <span className="toyota-chip">Total ownership clarity</span>
               <h2 className="text-pretty text-3xl font-black tracking-tight text-secondary sm:text-4xl">
@@ -292,7 +301,7 @@ export default function LandingPage() {
                       <Button className="h-12 rounded-full bg-white px-8 text-base font-semibold text-secondary hover:bg-white/90">
                         Create Toyota Agent account
                       </Button>
-                    </Link>
+                  </Link>
                     <Link href="/chat">
                       <Button
                         variant="ghost"
@@ -300,11 +309,11 @@ export default function LandingPage() {
                       >
                         Talk to the agent
                       </Button>
-                    </Link>
+                  </Link>
                   </div>
-                </div>
-              </div>
             </div>
+          </div>
+          </div>
           </section>
         </div>
       </div>
