@@ -2,7 +2,7 @@ import type { ReactNode } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { notFound } from "next/navigation"
-import { ArrowLeft, Calendar, DollarSign, Fuel, Gauge, Users, Zap } from "lucide-react"
+import { ArrowLeft, Calendar, DollarSign, Fuel, Gauge, Users, Zap, Sparkles } from "lucide-react"
 
 import { ToyotaFooter } from "@/components/layout/toyota-footer"
 import { Badge } from "@/components/ui/badge"
@@ -299,6 +299,14 @@ export default async function CarDetailPage({
                     Schedule test drive
                   </Button>
                 </Link>
+                {car.trimId === 23568 && (
+                  <Link href={`/showroom/${car.trimId}`} className="flex-1 min-w-[220px]">
+                    <Button variant="outline" className="h-12 w-full rounded-full px-6 text-sm font-semibold">
+                      <Sparkles className="mr-2 h-4 w-4" />
+                      AR Preview
+                    </Button>
+                  </Link>
+                )}
               </div>
             </div>
           </div>
