@@ -698,7 +698,7 @@ export default function ChatPage() {
                         Chat or CALL our agent
                       </h3>
                       <p className="text-xs text-muted-foreground leading-relaxed break-words">
-                        Call <a href="tel:1-800-TOYOTA" className="font-semibold text-primary hover:underline">1-800-TOYOTA</a> to speak with our voice agent powered by Retell.
+                        Call <a href="tel:4052974640" className="font-semibold text-primary hover:underline">(405) 297-4640</a> to speak with our voice agent powered by Retell.
                       </p>
                     </div>
                   </div>
