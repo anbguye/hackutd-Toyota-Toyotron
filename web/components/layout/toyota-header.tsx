@@ -52,6 +52,7 @@ const DEFAULT_NAV: NavItem[] = [
 const DEFAULT_SECONDARY: SecondaryLink[] = [{ label: 'Sign In', href: '/login' }]
 
 const DEFAULT_CTA: CtaAction = { label: 'Launch Agent', href: '/signup' }
+const AUTHENTICATED_CTA: CtaAction = { label: 'Retake Quiz', href: '/quiz' }
 
 export function ToyotaHeader({
   navItems = DEFAULT_NAV,
@@ -169,17 +170,15 @@ export function ToyotaHeader({
               </Link>
             ))
           )}
-          {!isAuthenticated && (
-            <Button
-              asChild
-              className="rounded-full bg-[#EB0A1E] px-6 py-2 text-sm font-semibold text-white shadow-[0_18px_40px_-22px_rgba(235,10,30,0.75)] hover:bg-[#cf091a]"
-            >
-              <Link href={cta.href} className="inline-flex items-center gap-2">
-                <span>{cta.label}</span>
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
-          )}
+          <Button
+            asChild
+            className="rounded-full bg-[#EB0A1E] px-6 py-2 text-sm font-semibold text-white shadow-[0_18px_40px_-22px_rgba(235,10,30,0.75)] hover:bg-[#cf091a]"
+          >
+            <Link href={isAuthenticated ? AUTHENTICATED_CTA.href : cta.href} className="inline-flex items-center gap-2">
+              <span>{isAuthenticated ? AUTHENTICATED_CTA.label : cta.label}</span>
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </Button>
           {rightSlot}
         </div>
 
@@ -236,17 +235,15 @@ export function ToyotaHeader({
                       </Link>
                     ))
                   )}
-                  {!isAuthenticated && (
-                    <Button
-                      asChild
-                      className="h-12 w-full rounded-full bg-[#EB0A1E] text-base font-semibold text-white shadow-[0_24px_44px_-26px_rgba(235,10,30,0.7)] hover:bg-[#cf091a]"
-                    >
-                      <Link href={cta.href} className="inline-flex items-center justify-center gap-2">
-                        <span>{cta.label}</span>
-                        <ArrowRight className="h-4 w-4" />
-                      </Link>
-                    </Button>
-                  )}
+                  <Button
+                    asChild
+                    className="h-12 w-full rounded-full bg-[#EB0A1E] text-base font-semibold text-white shadow-[0_24px_44px_-26px_rgba(235,10,30,0.7)] hover:bg-[#cf091a]"
+                  >
+                    <Link href={isAuthenticated ? AUTHENTICATED_CTA.href : cta.href} className="inline-flex items-center justify-center gap-2">
+                      <span>{isAuthenticated ? AUTHENTICATED_CTA.label : cta.label}</span>
+                      <ArrowRight className="h-4 w-4" />
+                    </Link>
+                  </Button>
                   {rightSlot && <div className="pt-2">{rightSlot}</div>}
                 </div>
               </div>
