@@ -3,10 +3,19 @@
 import { useState, useEffect, useRef } from "react";
 import { DefaultChatTransport } from "ai";
 import { useChat } from "@ai-sdk/react";
-import { Send, User, Bot, Sparkles, Loader2, Phone, Calendar, CheckCircle } from "lucide-react";
+import { Send, User, Bot, Sparkles, Loader2, Phone, Calendar, CheckCircle, DollarSign } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { CarRecommendations } from "@/components/chat/CarRecommendations";
 import { TypingIndicator } from "@/components/chat/TypingIndicator";
@@ -37,6 +46,12 @@ type UserPreferences = {
   mpg_priority: string | null;
   use_case: string | null;
 };
+
+// Bucket used for storing trade-in photos. Must exist in Supabase Storage.
+// Prefer an environment variable, fallback to a sensible default.
+const TRADEIN_BUCKET =
+  (process.env.NEXT_PUBLIC_SUPABASE_TRADEIN_BUCKET as string | undefined) ||
+  "trade-ins";
 
 function formatBudget(min: number | null, max: number | null): string {
   if (!min && !max) return "your budget";
@@ -142,6 +157,27 @@ export default function ChatPage() {
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [agentWorkflowSteps, setAgentWorkflowSteps] = useState<Array<{ name: string; description: string; status: "pending" | "active" | "completed" }> | null>(null);
+  
+  // Trade-in dialog state
+  const [tradeInDialogOpen, setTradeInDialogOpen] = useState(false);
+  const [tradeInVin, setTradeInVin] = useState("");
+  const [tradeInImageUrl, setTradeInImageUrl] = useState("");
+  const [tradeInLoading, setTradeInLoading] = useState(false);
+  const [tradeInUploading, setTradeInUploading] = useState(false);
+  const [tradeInResult, setTradeInResult] = useState<{
+    id: string;
+    timestamp: number;
+    messageIndex: number; // Index in deduplicatedMessages when trade-in was generated
+    attached: boolean; // Whether the trade-in data has been attached to a message
+    estimateUsd: number;
+    details: {
+      make: string;
+      model: string;
+      modelYear: number;
+      trim?: string;
+      conditionScore?: number | null;
+    };
+  } | null>(null);
   const speechRecognitionRef = useRef<SpeechRecognitionManager | null>(null);
   const speechSynthesisRef = useRef<SpeechSynthesisManager | null>(null);
   const silenceDetectorRef = useRef<SilenceDetector | null>(null);
@@ -291,6 +327,8 @@ export default function ChatPage() {
     textParts = textParts.replace(/```json\s*\{[\s\S]*?"items"[\s\S]*?\}\s*```/gi, "");
     // Remove any standalone JSON objects that look like tool outputs
     textParts = textParts.replace(/\{[\s\S]*?"trim_id"[\s\S]*?"image_url"[\s\S]*?\}/g, "");
+    // Remove trade-in metadata that was silently attached to user messages
+    textParts = textParts.replace(/\n\n\[Trade-in estimate:[\s\S]*?\]/gi, "");
     textParts = textParts.trim();
 
     const hasToolParts = message.parts.some(
@@ -321,7 +359,39 @@ export default function ChatPage() {
     return true;
   });
 
-  const displayMessages = initialMessage ? [initialMessage, ...deduplicatedMessages] : deduplicatedMessages;
+  // Insert trade-in card at the correct position (before messages sent after it was generated)
+  let displayMessages: DisplayMessage[];
+  if (tradeInResult) {
+    const tradeInMessage: DisplayMessage = {
+      id: tradeInResult.id,
+      role: "agent",
+      content: "",
+      parts: [{
+        type: "tool-estimateTradeIn",
+        state: "output-available",
+        output: {
+          estimateUsd: tradeInResult.estimateUsd,
+          details: tradeInResult.details,
+        },
+      }],
+    };
+
+    // Insert trade-in message at the position it was generated
+    // messageIndex is the index in chatMessages when trade-in was generated
+    // We need to insert it after that position in deduplicatedMessages
+    // Since deduplicatedMessages may have fewer messages, we insert at the end if index is out of bounds
+    const insertIndex = Math.min(tradeInResult.messageIndex + 1, deduplicatedMessages.length);
+    const messagesBefore = deduplicatedMessages.slice(0, insertIndex);
+    const messagesAfter = deduplicatedMessages.slice(insertIndex);
+    
+    displayMessages = initialMessage 
+      ? [initialMessage, ...messagesBefore, tradeInMessage, ...messagesAfter]
+      : [...messagesBefore, tradeInMessage, ...messagesAfter];
+  } else {
+    displayMessages = initialMessage 
+      ? [initialMessage, ...deduplicatedMessages]
+      : deduplicatedMessages;
+  }
 
   // Check if we should show typing indicator
   // Show when: streaming, no active tool calls, and either:
@@ -350,9 +420,22 @@ export default function ChatPage() {
     // Clear input immediately for better UX
     setInput("");
 
+    // If there's a pending trade-in result that hasn't been attached yet, attach it to this message
+    let finalMessage = messageToSend;
+    if (tradeInResult && !tradeInResult.attached) {
+      // Attach trade-in data silently to the message (will be filtered out in display)
+      finalMessage += `\n\n[Trade-in estimate: ${tradeInResult.estimateUsd} USD for ${tradeInResult.details.modelYear} ${tradeInResult.details.make} ${tradeInResult.details.model}${tradeInResult.details.trim ? ` ${tradeInResult.details.trim}` : ""}${tradeInResult.details.conditionScore !== null ? ` (condition: ${tradeInResult.details.conditionScore}/100)` : ""}]`;
+      
+      // Mark trade-in as attached but keep it visible
+      setTradeInResult({
+        ...tradeInResult,
+        attached: true,
+      });
+    }
+
     try {
       await sendMessage({
-        parts: [{ type: "text", text: messageToSend }],
+        parts: [{ type: "text", text: finalMessage }],
       });
     } catch (sendError) {
       console.error("Failed to send message", sendError);
@@ -534,6 +617,116 @@ export default function ChatPage() {
       return () => clearTimeout(speakTimeout);
     }
   }, [displayMessages, isVoiceMode, isStreaming]);
+
+  // Upload selected image to Supabase Storage and set the public URL
+  const uploadTradeInImage = async (file: File) => {
+    if (!file) return;
+    setTradeInUploading(true);
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData?.user?.id ?? "anon";
+
+      const fileExt = file.name.split(".").pop() || "jpg";
+      const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
+      const filePath = `tradein/${userId}/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from(TRADEIN_BUCKET)
+        .upload(filePath, file, {
+          upsert: false,
+          contentType: file.type || "image/jpeg",
+        });
+
+      if (uploadError) {
+        console.error("[ChatPage] Trade-in image upload failed:", uploadError);
+        toast.error("Failed to upload image. Please try again.");
+        return;
+      }
+
+      const { data: publicData } = supabase.storage
+        .from(TRADEIN_BUCKET)
+        .getPublicUrl(filePath);
+
+      if (!publicData?.publicUrl) {
+        toast.error("Could not get image URL after upload.");
+        return;
+      }
+
+      setTradeInImageUrl(publicData.publicUrl);
+      toast.success("Image uploaded");
+    } catch (err) {
+      console.error("[ChatPage] Trade-in image upload exception:", err);
+      toast.error("Image upload error. Please try again.");
+    } finally {
+      setTradeInUploading(false);
+    }
+  };
+
+  // Handle trade-in estimation
+  const handleTradeInEstimate = async () => {
+    if (!tradeInVin || tradeInVin.length !== 17) {
+      toast.error("Please enter a valid 17-character VIN");
+      return;
+    }
+
+    setTradeInLoading(true);
+    try {
+      const headers: HeadersInit = {
+        "Content-Type": "application/json",
+      };
+
+      // Add auth token if available
+      if (authTokenRef.current) {
+        headers["Authorization"] = `Bearer ${authTokenRef.current}`;
+      }
+
+      const response = await fetch("/api/tradein", {
+        method: "POST",
+        headers,
+        credentials: "include",
+        body: JSON.stringify({
+          vin: tradeInVin.trim().toUpperCase(),
+          imageUrl: tradeInImageUrl.trim() || undefined,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        toast.error(data.error || "Failed to estimate trade-in value");
+        return;
+      }
+
+      const estimateFormatted = new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: "USD",
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }).format(data.estimateUsd);
+
+      // Close dialog and reset form
+      setTradeInDialogOpen(false);
+      setTradeInVin("");
+      setTradeInImageUrl("");
+
+      // Store trade-in result to display as agent card
+      // Track the current message count to insert at correct position
+      // Use chatMessages.length to get the current message count
+      const currentMessageCount = chatMessages.length;
+      setTradeInResult({
+        ...data,
+        id: `tradein-${Date.now()}`,
+        timestamp: Date.now(),
+        messageIndex: currentMessageCount - 1, // Insert after the last message
+        attached: false, // Not yet attached to a message
+      });
+    } catch (error) {
+      console.error("[ChatPage] Trade-in error:", error);
+      toast.error("An error occurred while estimating trade-in value");
+    } finally {
+      setTradeInLoading(false);
+    }
+  };
 
   // Update agent workflow steps based on tool usage across the conversation
   useEffect(() => {
@@ -950,6 +1143,59 @@ export default function ChatPage() {
                                           return null;
                                       }
                                     }
+
+                                    // Handle estimateTradeIn tool
+                                    if (part.type === "tool-estimateTradeIn") {
+                                      switch (part.state) {
+                                        case "input-available":
+                                          return (
+                                            <div key={partIndex} className="flex items-center gap-2 text-xs text-muted-foreground">
+                                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                              <span>Estimating trade-in value...</span>
+                                            </div>
+                                          );
+                                        case "output-available":
+                                          const tradeInOutput = part.output as any;
+                                          if (tradeInOutput?.estimateUsd) {
+                                            const estimateFormatted = new Intl.NumberFormat("en-US", {
+                                              style: "currency",
+                                              currency: "USD",
+                                              minimumFractionDigits: 0,
+                                              maximumFractionDigits: 0,
+                                            }).format(tradeInOutput.estimateUsd);
+
+                                            const vehicleName = `${tradeInOutput.details?.modelYear || ""} ${tradeInOutput.details?.make || ""} ${tradeInOutput.details?.model || ""}${tradeInOutput.details?.trim ? ` ${tradeInOutput.details.trim}` : ""}`.trim();
+
+                                            return (
+                                              <div key={partIndex} className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-xs">
+                                                <div className="flex items-start gap-2">
+                                                  <DollarSign className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+                                                  <div className="flex-1 space-y-1.5">
+                                                    <p className="font-semibold text-destructive">Trade-in Estimate</p>
+                                                    <div className="space-y-0.5 text-xs text-destructive/90">
+                                                      <p><span className="font-medium">Vehicle:</span> {vehicleName}</p>
+                                                      <p><span className="font-medium">Estimated Value:</span> {estimateFormatted}</p>
+                                                      {tradeInOutput.details?.conditionScore !== null && tradeInOutput.details?.conditionScore !== undefined && (
+                                                        <p><span className="font-medium">Condition Score:</span> {tradeInOutput.details.conditionScore}/100</p>
+                                                      )}
+                                                    </div>
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            );
+                                          }
+                                          return null;
+                                        case "output-error":
+                                          return (
+                                            <div key={partIndex} className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-xs text-destructive">
+                                              <p className="font-semibold">Error estimating trade-in value</p>
+                                              <p className="mt-1 text-xs">{part.errorText || "Unknown error"}</p>
+                                            </div>
+                                          );
+                                        default:
+                                          return null;
+                                      }
+                                    }
                                     return null;
                                   })}
                                 </div>
@@ -1019,6 +1265,113 @@ export default function ChatPage() {
                     isSupported={speechRecognitionRef.current?.getSupported() ?? false}
                     onClick={handleVoiceToggle}
                   />
+                  <Dialog open={tradeInDialogOpen} onOpenChange={setTradeInDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button
+                        size="icon"
+                        disabled={isStreaming || isListening}
+                        className="h-10 w-10 rounded-full border border-border/70 bg-card/80 text-muted-foreground hover:bg-card hover:text-primary disabled:opacity-60"
+                        title="Estimate trade-in value"
+                      >
+                        <DollarSign className="h-4 w-4" />
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-md">
+                      <DialogHeader>
+                        <DialogTitle>Estimate Trade-In Value</DialogTitle>
+                        <DialogDescription>
+                          Enter your vehicle's VIN and optionally upload an image to get an estimated trade-in value.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                          <label htmlFor="vin" className="text-sm font-medium">
+                            VIN <span className="text-destructive">*</span>
+                          </label>
+                          <Input
+                            id="vin"
+                            placeholder="Enter 17-character VIN"
+                            value={tradeInVin}
+                            onChange={(e) => setTradeInVin(e.target.value.toUpperCase())}
+                            maxLength={17}
+                            disabled={tradeInLoading}
+                            className="font-mono"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label htmlFor="tradein-photo" className="text-sm font-medium">
+                            Upload Photo <span className="text-muted-foreground">(optional)</span>
+                          </label>
+                          <input
+                            id="tradein-photo"
+                            type="file"
+                            accept="image/*"
+                            disabled={tradeInLoading || tradeInUploading}
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                void uploadTradeInImage(file);
+                              }
+                            }}
+                            className="block w-full text-sm file:mr-4 file:rounded-md file:border file:border-border/70 file:bg-card/80 file:px-3 file:py-1.5 file:text-sm file:text-foreground hover:file:bg-card/90 disabled:opacity-60"
+                          />
+                          {tradeInUploading && (
+                            <div className="flex items-center text-sm text-muted-foreground">
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Uploading image to Supabase...
+                            </div>
+                          )}
+                          {tradeInImageUrl && !tradeInUploading && (
+                            <div className="space-y-2">
+                              <div className="text-xs text-muted-foreground">
+                                Image uploaded. A public URL will be used for condition assessment.
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <img
+                                  src={tradeInImageUrl}
+                                  alt="Trade-in preview"
+                                  className="h-16 w-24 rounded-md border object-cover"
+                                />
+                                <Input value={tradeInImageUrl} readOnly className="text-xs" />
+                              </div>
+                            </div>
+                          )}
+                          {!tradeInImageUrl && (
+                            <p className="text-xs text-muted-foreground">
+                              Upload a vehicle photo to help the AI assess condition and refine the estimate.
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setTradeInDialogOpen(false);
+                            setTradeInVin("");
+                            setTradeInImageUrl("");
+                          }}
+                          disabled={tradeInLoading || tradeInUploading}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          onClick={handleTradeInEstimate}
+                          disabled={tradeInLoading || tradeInUploading || tradeInVin.length !== 17}
+                          className="bg-primary text-primary-foreground"
+                        >
+                          {tradeInLoading ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Estimating...
+                            </>
+                          ) : (
+                            "Get Estimate"
+                          )}
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
                   <Button
                     onClick={() => {
                       void handleSend();
@@ -1037,7 +1390,7 @@ export default function ChatPage() {
                 )}
                 {!error && (
                   <p className="mt-2 text-center text-xs text-muted-foreground">
-                    Toyota Agent cross-checks real Toyota data—pricing, incentives, safety, and availability.
+                    Powered by NVIDIA Nemotron™
                   </p>
                 )}
               </div>
