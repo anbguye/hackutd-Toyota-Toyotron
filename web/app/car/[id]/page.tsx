@@ -1,14 +1,14 @@
-"use client";
-
 import type { ReactNode } from "react"
 import Image from "next/image"
 import Link from "next/link"
+import { notFound } from "next/navigation"
 import { ArrowLeft, Calendar, DollarSign, Fuel, Gauge, GitCompare, Users, Zap } from "lucide-react"
 
 import { ToyotaFooter } from "@/components/layout/toyota-footer"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { createSupabaseServerClient } from "@/lib/supabase/server"
 
 type VehicleForBooking = {
   make: string
@@ -27,37 +27,201 @@ type CarDetail = VehicleForBooking & {
   drive: string
   powertrain: string
   image: string
+  description?: string
+  engineType?: string
+  horsepower?: number
+  torque?: number
+  transmission?: string
+  length?: number
+  width?: number
+  groundClearance?: number
+  cargoCapacity?: number
 }
 
-const car: CarDetail = {
-  make: "Toyota",
-  model: "RAV4",
-  submodel: "Hybrid",
-  trim: "XSE",
-  name: "RAV4 Hybrid XSE",
-  year: 2025,
-  type: "SUV",
-  seats: 5,
-  mpg: { city: 41, highway: 38 },
-  msrp: 36000,
-  drive: "AWD",
-  powertrain: "Hybrid",
-  image: "/toyota-rav4-hybrid.jpg",
+type ToyotaTrimSpec = {
+  trim_id: number
+  model_year: number
+  make: string
+  model: string
+  submodel: string
+  trim: string
+  description: string
+  msrp: number
+  body_type: string
+  body_seats: number
+  ground_clearance: number
+  cargo_capacity: number
+  engine_type: string
+  cylinders: number
+  engine_size: number
+  horsepower_hp: number
+  torque_ft_lbs: number
+  drive_type: string
+  transmission: string
+  combined_mpg: number
+  city_mpg: number
+  highway_mpg: number
+  image_url: string
 }
 
-const insurance = {
-  monthly: 145,
-  annual: 1740,
+function calculateInsuranceEstimate(
+  msrp: number,
+  horsepower: number,
+  bodyType: string,
+  doors: number,
+  mpg: number
+) {
+  // Realistic insurance calculation based on actual risk factors
+  // US average auto insurance: ~$1,700/year for standard cars, $2,500+ for performance vehicles
+
+  // Base premium varies by vehicle value (0.5% of MSRP minimum)
+  const valueFactor = Math.max(1500, msrp * 0.005)
+
+  // Horsepower is the biggest factor for insurance cost
+  // High performance vehicles have significantly higher rates
+  let horsepowerMultiplier = 1.0
+  if (horsepower >= 400) {
+    horsepowerMultiplier = 1.6 // Sports/performance cars
+  } else if (horsepower >= 300) {
+    horsepowerMultiplier = 1.4 // High performance
+  } else if (horsepower >= 250) {
+    horsepowerMultiplier = 1.2 // Performance oriented
+  } else if (horsepower >= 200) {
+    horsepowerMultiplier = 1.1 // Above average
+  } else if (horsepower < 150) {
+    horsepowerMultiplier = 0.85 // Economy vehicles get discount
+  }
+
+  // Body type risk factors
+  const bodyTypeFactors: Record<string, number> = {
+    sedan: 1.0,
+    suv: 1.08,
+    truck: 1.12,
+    coupe: 1.35, // Much higher for coupes
+    convertible: 1.45, // Highest risk - more accidents
+    van: 0.95,
+    hatchback: 1.05,
+    sports: 1.5, // If classified as sports car
+  }
+  const bodyTypeFactor = bodyTypeFactors[bodyType.toLowerCase()] || 1.0
+
+  // Door count factor (2-door cars have significantly higher claim rates)
+  const doorFactor = doors <= 2 ? 1.25 : 1.0
+
+  // Fuel efficiency factor (lower MPG often = higher risk/performance)
+  let mpgFactor = 1.0
+  if (mpg < 18) {
+    mpgFactor = 1.15 // Very low efficiency = high performance premium
+  } else if (mpg < 22) {
+    mpgFactor = 1.08
+  } else if (mpg < 28) {
+    mpgFactor = 1.0
+  } else if (mpg >= 35) {
+    mpgFactor = 0.92 // Hybrid/efficient vehicles get discount
+  }
+
+  // Toyota brand safety discount (Toyotas have excellent safety ratings)
+  const toyotaDiscount = 0.88
+
+  // Calculate annual premium
+  const annualRate = Math.round(
+    valueFactor *
+      horsepowerMultiplier *
+      bodyTypeFactor *
+      doorFactor *
+      mpgFactor *
+      toyotaDiscount
+  )
+
+  const monthlyRate = Math.round(annualRate / 12)
+
+  return {
+    monthly: monthlyRate,
+    annual: annualRate,
+  }
 }
 
-const financing = [
-  { term: 36, payment: 1056, total: 38016, rate: 4.5 },
-  { term: 48, payment: 815, total: 39120, rate: 4.5 },
-  { term: 60, payment: 671, total: 40260, rate: 4.5 },
-  { term: 72, payment: 577, total: 41544, rate: 4.5 },
-]
+function calculateFinancingOptions(msrp: number) {
+  const rate = 4.5 / 100 / 12 // Monthly interest rate
+  const terms = [36, 48, 60, 72]
 
-export default function CarDetailPage() {
+  return terms.map((months) => {
+    const monthlyPayment = (msrp * (rate * Math.pow(1 + rate, months))) / (Math.pow(1 + rate, months) - 1)
+    const totalPayment = monthlyPayment * months
+
+    return {
+      term: months,
+      payment: Math.round(monthlyPayment),
+      total: Math.round(totalPayment),
+      rate: 4.5,
+    }
+  })
+}
+
+function capitalizeWords(str: string): string {
+  return str
+    .split(/\s+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ")
+}
+
+export default async function CarDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>
+}) {
+  const { id } = await params
+  const trimId = parseInt(id, 10)
+
+  if (Number.isNaN(trimId)) {
+    notFound()
+  }
+
+  const supabase = createSupabaseServerClient()
+  const { data: trimSpec, error } = await supabase
+    .from("toyota_trim_specs")
+    .select("*")
+    .eq("trim_id", trimId)
+    .single<ToyotaTrimSpec>()
+
+  if (error || !trimSpec) {
+    notFound()
+  }
+
+  const car: CarDetail = {
+    make: trimSpec.make,
+    model: trimSpec.model,
+    year: trimSpec.model_year,
+    submodel: trimSpec.submodel,
+    trim: trimSpec.trim,
+    name: `${trimSpec.model}${trimSpec.submodel ? ` ${trimSpec.submodel}` : ""} ${trimSpec.trim}`,
+    type: trimSpec.body_type,
+    seats: trimSpec.body_seats,
+    mpg: {
+      city: trimSpec.city_mpg,
+      highway: trimSpec.highway_mpg,
+    },
+    msrp: trimSpec.msrp,
+    drive: trimSpec.drive_type,
+    powertrain: trimSpec.submodel || "Gas",
+    image: trimSpec.image_url || "/placeholder.svg",
+    description: trimSpec.description,
+    engineType: trimSpec.engine_type,
+    horsepower: trimSpec.horsepower_hp,
+    torque: trimSpec.torque_ft_lbs,
+    transmission: trimSpec.transmission,
+    groundClearance: trimSpec.ground_clearance,
+    cargoCapacity: trimSpec.cargo_capacity,
+  }
+
+  const insurance = calculateInsuranceEstimate(
+    car.msrp,
+    car.horsepower || 150,
+    car.type,
+    trimSpec.body_doors,
+    car.mpg.city
+  )
+  const financing = calculateFinancingOptions(car.msrp)
   const testDriveHref = buildTestDriveHref(car)
 
   return (
@@ -111,10 +275,10 @@ export default function CarDetailPage() {
                   {car.mpg.city}/{car.mpg.highway}
                 </SpecCard>
                 <SpecCard icon={<Users className="h-5 w-5" />} label="Seating">
-                  {car.seats} seats
+                  {car.seats} Seats
                 </SpecCard>
                 <SpecCard icon={<Gauge className="h-5 w-5" />} label="Drive Type">
-                  {car.drive}
+                  {capitalizeWords(car.drive)}
                 </SpecCard>
                 <SpecCard icon={<Zap className="h-5 w-5" />} label="Powertrain">
                   {car.powertrain}
@@ -229,19 +393,19 @@ export default function CarDetailPage() {
                 <SpecGroup
                   title="Performance"
                   specs={[
-                    { label: "Engine", value: "2.5L 4-Cyl Hybrid DOHC" },
-                    { label: "Horsepower", value: "219 hp combined" },
-                    { label: "Torque", value: "163 lb-ft" },
-                    { label: "Transmission", value: "Electronic CVT" },
+                    { label: "Engine", value: car.engineType ? capitalizeWords(car.engineType) : "N/A" },
+                    { label: "Horsepower", value: car.horsepower ? `${car.horsepower} hp` : "N/A" },
+                    { label: "Torque", value: car.torque ? `${car.torque} lb-ft` : "N/A" },
+                    { label: "Transmission", value: car.transmission ? capitalizeWords(car.transmission) : "N/A" },
                   ]}
                 />
                 <SpecGroup
                   title="Dimensions"
                   specs={[
-                    { label: "Length", value: "180.9 in" },
-                    { label: "Width", value: "73.0 in" },
-                    { label: "Ground clearance", value: "8.1 in" },
-                    { label: "Cargo space", value: "37.5 cu ft" },
+                    { label: "Body Type", value: capitalizeWords(car.type) || "N/A" },
+                    { label: "Seating", value: car.seats ? `${car.seats} Seats` : "N/A" },
+                    { label: "Ground clearance", value: car.groundClearance ? `${car.groundClearance} in` : "N/A" },
+                    { label: "Cargo space", value: car.cargoCapacity ? `${car.cargoCapacity} cu ft` : "N/A" },
                   ]}
                 />
               </div>
