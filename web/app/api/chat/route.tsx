@@ -137,11 +137,11 @@ function buildSystemPrompt(
   systemPrompt +=
     "- CRITICAL: When including car information in emails, ALWAYS create clickable hyperlinks to the car detail pages\n";
   systemPrompt +=
-    "- Car detail page URLs follow this format: https://toyota-autoguide.vercel.app/car/<trim_id>\n";
+    "- Car detail page URLs follow this format: https://toyota-toyotron.vercel.app/car/<trim_id>\n";
   systemPrompt +=
-    "- Use HTML anchor tags: <a href=\"https://toyota-autoguide.vercel.app/car/{trim_id}\">{car name/model}</a>\n";
+    "- Use HTML anchor tags: <a href=\"https://toyota-toyotron.vercel.app/car/{trim_id}\">{car name/model}</a>\n";
   systemPrompt +=
-    "- Example: <a href=\"https://toyota-autoguide.vercel.app/car/12345\">2024 Toyota Camry XLE</a>\n";
+    "- Example: <a href=\"https://toyota-toyotron.vercel.app/car/12345\">2024 Toyota Camry XLE</a>\n";
   systemPrompt +=
     "- Make car names, models, or 'View Details' text clickable links so users can easily access full car information\n";
   systemPrompt +=
@@ -149,9 +149,9 @@ function buildSystemPrompt(
   systemPrompt +=
     "- Use HTML img tags with the car's image_url: <img src=\"{image_url}\" alt=\"{car name/model}\" style=\"max-width: 100%; height: auto; border-radius: 8px; margin: 10px 0;\" />\n";
   systemPrompt +=
-    "- Wrap images in anchor tags to make them clickable links to the car detail page: <a href=\"https://toyota-autoguide.vercel.app/car/{trim_id}\"><img src=\"{image_url}\" alt=\"{car name/model}\" style=\"max-width: 100%; height: auto; border-radius: 8px; margin: 10px 0;\" /></a>\n";
+    "- Wrap images in anchor tags to make them clickable links to the car detail page: <a href=\"https://toyota-toyotron.vercel.app/car/{trim_id}\"><img src=\"{image_url}\" alt=\"{car name/model}\" style=\"max-width: 100%; height: auto; border-radius: 8px; margin: 10px 0;\" /></a>\n";
   systemPrompt +=
-    "- Example: <a href=\"https://toyota-autoguide.vercel.app/car/12345\"><img src=\"https://example.com/car-image.jpg\" alt=\"2024 Toyota Camry XLE\" style=\"max-width: 100%; height: auto; border-radius: 8px; margin: 10px 0;\" /></a>\n";
+    "- Example: <a href=\"https://toyota-toyotron.vercel.app/car/12345\"><img src=\"https://example.com/car-image.jpg\" alt=\"2024 Toyota Camry XLE\" style=\"max-width: 100%; height: auto; border-radius: 8px; margin: 10px 0;\" /></a>\n";
   systemPrompt +=
     "- Include images for each car recommendation to make emails more visually appealing and informative\n";
   systemPrompt +=
