@@ -280,8 +280,10 @@ export async function POST(req: Request) {
     return new Response("Missing messages in request body.", { status: 400 });
   }
 
-  // Load user preferences
+  // Load user preferences and get user for tool context
   let preferences = null;
+  let currentUser = null;
+  let userSession = null;
   try {
     const supabase = await createSsrClient();
     const {
@@ -308,6 +310,9 @@ export async function POST(req: Request) {
     }
 
     if (user) {
+      currentUser = user;
+      const { data: { session } } = await supabase.auth.getSession();
+      userSession = session;
       preferences = await getUserPreferences(user.id);
     }
   } catch (error) {

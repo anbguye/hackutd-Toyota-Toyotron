@@ -9,7 +9,8 @@ import {
 import type { CarCard } from "@/lib/cars/types";
 import { sendEmailHtmlInputSchema } from "@/lib/email/schemas";
 import { sendEmailHtml } from "@/lib/email/resend";
-import { createSsrClient } from "@/lib/supabase/server";
+import { createSsrClient, createSupabaseServerClient } from "@/lib/supabase/server";
+import { sendBookingConfirmationEmail } from "@/lib/email/booking-confirmation";
 
 const searchToyotaTrimsTool = tool({
   description:
@@ -124,17 +125,41 @@ const scheduleTestDriveTool = tool({
     console.log("[scheduleTestDrive] Tool called with:", JSON.stringify(input, null, 2));
     
     try {
-      // Get user info from Supabase
+      // Get user info from Supabase - tools execute in server context with cookie access
+      // Note: createSsrClient() uses cookies() from Next.js which should work in server context
       const supabase = await createSsrClient();
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
       
-      if (userError || !user) {
+      // Try to get session first (includes access token and user)
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError) {
+        console.error("[scheduleTestDrive] Session error:", sessionError);
+      }
+      
+      // Get user from session (preferred) or directly via getUser()
+      let user = session?.user || null;
+      
+      if (!user) {
+        // Fallback: try getUser() directly
+        const { data: { user: fetchedUser }, error: userError } = await supabase.auth.getUser();
+        if (userError) {
+          console.error("[scheduleTestDrive] User fetch error:", userError);
+          console.error("[scheduleTestDrive] Error details:", JSON.stringify(userError, null, 2));
+        }
+        user = fetchedUser;
+      }
+      
+      if (!user) {
+        console.error("[scheduleTestDrive] No user found after all attempts. Session exists:", !!session, "Session error:", sessionError);
+        // Check if this is a cookie access issue
         return {
           success: false,
-          error: "User authentication required. Please sign in to schedule a test drive.",
+          error: "Unable to verify your session. Please refresh the page and try again. If the issue persists, please sign out and sign back in.",
           link: "/login",
         };
       }
+      
+      console.log("[scheduleTestDrive] User found:", user.id, "Email:", user.email);
 
       // Parse date/time
       let bookingDateTime: Date;
@@ -208,44 +233,101 @@ const scheduleTestDriveTool = tool({
         };
       }
 
-      // Call bookings API
-      const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
-      const response = await fetch(`${baseUrl}/api/bookings`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${(await supabase.auth.getSession()).data.session?.access_token || ""}`,
-        },
-        body: JSON.stringify({
-          contactName,
-          contactEmail,
-          contactPhone: contactPhone || "000-000-0000", // Fallback if no phone
-          preferredLocation: input.location || "downtown",
-          bookingDateTime: bookingDateTime.toISOString(),
-          vehicle: {
-            trimId: input.trimId,
-            make: vehicleData.make,
-            model: vehicleData.model,
-            year: vehicleData.model_year,
-            trim: vehicleData.trim,
-          },
-        }),
-      });
+      // Insert booking directly into database (more reliable than calling API)
+      const baseInsert = {
+        user_id: user.id,
+        car_id: vehicleData.trim_id,
+        preferred_location: input.location || "downtown",
+        booking_date: bookingDateTime.toISOString(),
+        status: "pending" as const,
+      };
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: "Failed to schedule test drive" }));
+      const extendedInsert = {
+        ...baseInsert,
+        contact_name: contactName,
+        contact_email: contactEmail,
+        contact_phone: contactPhone || "000-000-0000",
+        vehicle_make: vehicleData.make ?? null,
+        vehicle_model: vehicleData.model ?? null,
+        vehicle_year: typeof vehicleData.model_year === "number" ? vehicleData.model_year : null,
+        vehicle_trim: vehicleData.trim ?? null,
+      };
+
+      const { data: booking, error: insertError } = await supabase
+        .from("test_drive_bookings")
+        .insert(extendedInsert)
+        .select("*")
+        .single();
+
+      if (insertError) {
+        console.error("[scheduleTestDrive] Database insert error:", insertError);
+        // Try fallback insert
+        const { data: fallbackBooking, error: fallbackError } = await supabase
+          .from("test_drive_bookings")
+          .insert(baseInsert)
+          .select("*")
+          .single();
+
+        if (fallbackError) {
+          return {
+            success: false,
+            error: "Failed to create booking. Please try again later.",
+          };
+        }
+
+        // Send email for fallback booking
+        try {
+          await sendBookingConfirmationEmail({
+            contactName,
+            contactEmail,
+            contactPhone: contactPhone || "000-000-0000",
+            preferredLocation: input.location || "downtown",
+            bookingDateTime: bookingDateTime.toISOString(),
+            vehicleMake: vehicleData.make || "Vehicle",
+            vehicleModel: vehicleData.model || "Model",
+            vehicleYear: vehicleData.model_year || new Date().getFullYear(),
+            vehicleTrim: vehicleData.trim || "Trim",
+          });
+        } catch (emailError) {
+          console.error("[scheduleTestDrive] Email error:", emailError);
+        }
+
         return {
-          success: false,
-          error: errorData.message || "Failed to schedule test drive. Please try again.",
+          success: true,
+          message: `Test drive scheduled successfully for ${bookingDateTime.toLocaleDateString()} at ${bookingDateTime.toLocaleTimeString()}`,
+          bookingId: fallbackBooking?.id,
+          link: `/test-drive?trim_id=${input.trimId}&year=${vehicleData.model_year}&make=${vehicleData.make}&model=${vehicleData.model}&trim=${vehicleData.trim}`,
+          details: {
+            date: bookingDateTime.toLocaleDateString(),
+            time: bookingDateTime.toLocaleTimeString(),
+            location: input.location || "downtown",
+            vehicle: `${vehicleData.model_year} ${vehicleData.make} ${vehicleData.model} ${vehicleData.trim}`,
+          },
         };
       }
 
-      const bookingData = await response.json();
-      
+      // Send confirmation email for successful booking
+      try {
+        await sendBookingConfirmationEmail({
+          contactName,
+          contactEmail,
+          contactPhone: contactPhone || "000-000-0000",
+          preferredLocation: input.location || "downtown",
+          bookingDateTime: bookingDateTime.toISOString(),
+          vehicleMake: vehicleData.make || "Vehicle",
+          vehicleModel: vehicleData.model || "Model",
+          vehicleYear: vehicleData.model_year || new Date().getFullYear(),
+          vehicleTrim: vehicleData.trim || "Trim",
+        });
+      } catch (emailError) {
+        console.error("[scheduleTestDrive] Email error:", emailError);
+        // Don't fail the booking if email fails
+      }
+
       return {
         success: true,
         message: `Test drive scheduled successfully for ${bookingDateTime.toLocaleDateString()} at ${bookingDateTime.toLocaleTimeString()}`,
-        bookingId: bookingData.booking?.id,
+        bookingId: booking?.id,
         link: `/test-drive?trim_id=${input.trimId}&year=${vehicleData.model_year}&make=${vehicleData.make}&model=${vehicleData.model}&trim=${vehicleData.trim}`,
         details: {
           date: bookingDateTime.toLocaleDateString(),

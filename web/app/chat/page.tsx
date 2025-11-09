@@ -613,10 +613,11 @@ export default function ChatPage() {
 
   return (
     <RequireAuth>
-      <div className="flex min-h-full flex-col bg-background text-foreground">
-        <div className="flex-1">
-          <div className="toyota-container flex h-full max-w-4xl flex-col py-6">
-            <div className="mb-6 space-y-4">
+      <div className="flex h-[calc(100vh-var(--header-h,80px))] flex-col bg-background text-foreground overflow-hidden">
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          <div className="toyota-container flex flex-col h-full max-w-4xl mx-auto w-full py-6 px-4 overflow-hidden">
+            {/* Fixed header section */}
+            <div className="mb-6 space-y-4 flex-shrink-0">
               <div className="rounded-3xl border border-border/70 bg-card/70 px-6 py-5 backdrop-blur">
                 <div className="flex items-start gap-4">
                   <div className="rounded-full bg-primary/10 p-3 text-primary">
@@ -656,9 +657,11 @@ export default function ChatPage() {
               </div>
             </div>
 
-            <div className="relative flex-1 overflow-hidden rounded-4xl border border-border/70 bg-card/60 backdrop-blur">
-              <ScrollArea className="h-full p-8">
-                <div className="space-y-6">
+            {/* Scrollable chat container with fixed height */}
+            <div className="relative flex-1 min-h-0 flex flex-col rounded-4xl border border-border/70 bg-card/60 backdrop-blur">
+              <div className="flex-1 min-h-0 overflow-hidden">
+                <ScrollArea className="h-full">
+                  <div className="p-8 space-y-6">
                   {/* Persistent Agent Workflow Display */}
                   {agentWorkflowSteps && (
                     <div className="mb-4">
@@ -880,10 +883,12 @@ export default function ChatPage() {
                   )}
                   {/* Scroll anchor */}
                   <div ref={messagesEndRef} />
-                </div>
-              </ScrollArea>
+                  </div>
+                </ScrollArea>
+              </div>
 
-              <div className="border-t border-border/60 bg-background/80 px-6 py-4">
+              {/* Fixed input section at bottom */}
+              <div className="border-t border-border/60 bg-background/80 px-6 py-4 flex-shrink-0">
                 <div className="flex gap-3">
                   <Input
                     placeholder="Ask about Toyota models, deals, or ownership..."
