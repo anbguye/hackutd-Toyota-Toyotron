@@ -1,46 +1,113 @@
 "use client"
 
-import { useState } from "react"
-import { Send, User, Bot, Sparkles } from "lucide-react"
+import { useState, useEffect } from "react"
+import { useAtom, useAtomValue } from "jotai"
+import { Send, User, Bot, Sparkles, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { ToyotaHeader } from "@/components/layout/toyota-header"
 import { RequireAuth } from "@/components/auth/RequireAuth"
 import { LogoutButton } from "@/components/auth/LogoutButton"
-
-type Message = {
-  role: "user" | "agent"
-  content: string
-  suggestions?: string[]
-}
+import { chatAtom, addMessageAtom, type ChatMessage } from "@/atoms/chatAtom"
+import { preferencesAtom } from "@/atoms/preferencesAtom"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import Link from "next/link"
 
 export default function ChatPage() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: "agent",
-      content:
-        "Hi! I'm your Toyota shopping companion. Based on your preferences, I found some excellent matches for you. You're looking for an SUV around $35,000 for daily commutes with good fuel efficiency, right?",
-      suggestions: ["Yes, that's right", "I want to adjust my budget", "Show me the options"],
-    },
-  ])
+  const [messages, setMessages] = useAtom(chatAtom)
+  const preferences = useAtomValue(preferencesAtom)
+  const [, addMessage] = useAtom(addMessageAtom)
   const [input, setInput] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const handleSend = () => {
-    if (!input.trim()) return
-
-    const newMessages: Message[] = [
-      ...messages,
-      { role: "user", content: input },
-      {
+  // Initialize with welcome message if chat is empty
+  useEffect(() => {
+    if (messages.length === 0) {
+      const welcomeMessage: ChatMessage = {
         role: "agent",
         content:
-          "Great! Based on what you've told me, I recommend the 2025 Toyota RAV4 Hybrid. It's perfect for daily commuting with an impressive 41 MPG city, seats 5 comfortably, and falls within your budget at $36,000. Would you like to see a detailed breakdown of total costs including insurance and financing?",
-        suggestions: ["Show me total costs", "Compare with other models", "Schedule a test drive"],
-      },
-    ]
-    setMessages(newMessages)
+          "Hi! I'm your Toyota shopping companion. I can help you find the perfect Toyota vehicle based on your preferences. What are you looking for in your next car?",
+        timestamp: new Date().toISOString(),
+        suggestions: [
+          "I need a family SUV",
+          "Show me fuel-efficient options",
+          "What's in my budget?",
+        ],
+      }
+      addMessage(welcomeMessage)
+    }
+  }, [messages.length, addMessage])
+
+  const handleSend = async () => {
+    if (!input.trim() || isLoading) return
+
+    const userMessage = input.trim()
     setInput("")
+    setIsLoading(true)
+    setError(null)
+
+    // Add user message to chat
+    const userMsg: ChatMessage = {
+      role: "user",
+      content: userMessage,
+      timestamp: new Date().toISOString(),
+    }
+    addMessage(userMsg)
+
+    try {
+      // Prepare chat history for API (include the new user message)
+      const chatHistory = [...messages, userMsg].map((msg) => ({
+        role: msg.role === "user" ? "user" : "assistant",
+        content: msg.content,
+      }))
+
+      // Call API endpoint
+      const response = await fetch("/api/agent/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userMessage,
+          preferences: preferences || undefined,
+          chatHistory,
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || errorData.message || "Failed to get response")
+      }
+
+      const data = await response.json()
+
+      // Add agent response to chat
+      const agentMsg: ChatMessage = {
+        role: "agent",
+        content: data.message,
+        timestamp: data.timestamp || new Date().toISOString(),
+        carSuggestions: data.suggestions || [],
+        suggestions: data.suggestions?.length
+          ? ["Tell me more", "Compare options", "Schedule test drive"]
+          : undefined,
+      }
+      addMessage(agentMsg)
+    } catch (err: any) {
+      console.error("[CHAT] Error sending message:", err)
+      setError(err.message || "Failed to send message. Please try again.")
+
+      // Add error message to chat
+      const errorMsg: ChatMessage = {
+        role: "agent",
+        content: `I apologize, but I encountered an error: ${err.message || "Unknown error"}. Please try again.`,
+        timestamp: new Date().toISOString(),
+      }
+      addMessage(errorMsg)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -108,9 +175,51 @@ export default function ChatPage() {
                                   size="sm"
                                   className="rounded-full border-border/60 text-xs font-semibold text-muted-foreground hover:border-primary/70 hover:text-primary"
                                   onClick={() => setInput(suggestion)}
+                                  disabled={isLoading}
                                 >
                                   {suggestion}
                                 </Button>
+                              ))}
+                            </div>
+                          )}
+                          {message.carSuggestions && message.carSuggestions.length > 0 && (
+                            <div className="mt-4 space-y-3">
+                              {message.carSuggestions.map((suggestion) => (
+                                <Card
+                                  key={suggestion.carId}
+                                  className="border-border/60 hover:border-primary/70 transition-colors"
+                                >
+                                  <CardHeader className="pb-3">
+                                    <CardTitle className="text-sm font-semibold">
+                                      {suggestion.name}
+                                    </CardTitle>
+                                    <CardDescription className="text-xs">
+                                      {suggestion.reasoning}
+                                    </CardDescription>
+                                  </CardHeader>
+                                  <CardContent className="pt-0">
+                                    <div className="flex gap-2">
+                                      <Button
+                                        asChild
+                                        variant="outline"
+                                        size="sm"
+                                        className="flex-1"
+                                      >
+                                        <Link href={`/car/${suggestion.carId}`}>View Details</Link>
+                                      </Button>
+                                      <Button
+                                        asChild
+                                        variant="default"
+                                        size="sm"
+                                        className="flex-1"
+                                      >
+                                        <Link href={`/test-drive?car=${suggestion.carId}`}>
+                                          Test Drive
+                                        </Link>
+                                      </Button>
+                                    </div>
+                                  </CardContent>
+                                </Card>
                               ))}
                             </div>
                           )}
@@ -127,20 +236,31 @@ export default function ChatPage() {
               </ScrollArea>
 
               <div className="border-t border-border/60 bg-background/80 px-6 py-4">
+                {error && (
+                  <div className="mb-3 rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-2 text-sm text-destructive">
+                    {error}
+                  </div>
+                )}
                 <div className="flex gap-3">
                   <Input
                     placeholder="Ask about Toyota models, deals, or ownership..."
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleSend()}
+                    onKeyDown={(e) => e.key === "Enter" && !isLoading && handleSend()}
                     className="h-12 flex-1 rounded-full border-border/70 bg-card/80 px-5"
+                    disabled={isLoading}
                   />
                   <Button
                     onClick={handleSend}
                     size="icon"
-                    className="h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-[0_24px_48px_-32px_rgba(235,10,30,0.6)] hover:bg-primary/90"
+                    disabled={isLoading || !input.trim()}
+                    className="h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-[0_24px_48px_-32px_rgba(235,10,30,0.6)] hover:bg-primary/90 disabled:opacity-50"
                   >
-                    <Send className="h-5 w-5" />
+                    {isLoading ? (
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    ) : (
+                      <Send className="h-5 w-5" />
+                    )}
                   </Button>
                 </div>
                 <p className="mt-3 text-center text-xs text-muted-foreground">

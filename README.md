@@ -30,12 +30,26 @@ npm run dev
 npm run lint
 ```
 
-Create a `.env.local` inside `web/` with your Supabase credentials:
+## Environment Setup
+
+Create a `.env.local` file inside `web/` with your Supabase credentials:
 
 ```bash
-NEXT_PUBLIC_SUPABASE_URL=...
-NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+# Required: Supabase Configuration
+# Get these from your Supabase project: https://app.supabase.com → Settings → API
+NEXT_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+
+# Optional: Server-side only (for admin operations)
+# SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
 ```
+
+**To get your Supabase credentials:**
+1. Go to [Supabase Dashboard](https://app.supabase.com)
+2. Select your project (or create a new one)
+3. Go to **Settings** → **API**
+4. Copy the **Project URL** → use as `NEXT_PUBLIC_SUPABASE_URL`
+5. Copy the **anon/public key** → use as `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 
 ## Project Layout
 
